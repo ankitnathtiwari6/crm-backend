@@ -1,4 +1,3 @@
-// models/Lead.ts
 import mongoose, { Document, Schema } from "mongoose";
 
 // Define the Message interface
@@ -35,6 +34,24 @@ const MessageSchema: Schema = new Schema({
   },
 });
 
+// Define the AssignedTo interface
+interface IAssignedTo {
+  id: string;
+  name: string;
+}
+
+// Define the AssignedTo schema
+const AssignedToSchema: Schema = new Schema({
+  id: {
+    type: String,
+    required: true,
+  },
+  name: {
+    type: String,
+    required: true,
+  },
+});
+
 // Define the Lead document interface
 export interface ILead extends Document {
   leadPhoneNumber: string;
@@ -45,7 +62,8 @@ export interface ILead extends Document {
   preferredCountry?: string;
   city?: string;
   state?: string;
-  neetScore?: number;
+  neetScore?: number | null;
+  assignedTo?: IAssignedTo;
   numberOfEnquiry: number;
   numberOfChatsMessages: number;
   firstInteraction: Date;
@@ -94,6 +112,15 @@ const LeadSchema: Schema = new Schema(
     },
     neetScore: {
       type: Number,
+      default: null,
+    },
+    assignedTo: {
+      id: {
+        type: String,
+      },
+      name: {
+        type: String,
+      },
     },
     numberOfEnquiry: {
       type: Number,

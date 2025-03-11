@@ -8,7 +8,7 @@ import { notFound, errorHandler } from "./middleware/errorMiddleware";
 
 import whatsappWebhookRoutes from "./routes/whatsappWebhookRoutes";
 import leadRoutes from "./routes/leadRoutes";
-
+import authRoutes from "./routes/authRoutes";
 // Load environment variables
 dotenv.config();
 
@@ -33,6 +33,7 @@ if (process.env.NODE_ENV === "development") {
 // Routes
 app.use("/api/webhook", whatsappWebhookRoutes);
 app.use("/api/leads", leadRoutes);
+app.use("/api/auth", authRoutes);
 
 // Basic route
 app.get("/", (req, res) => {

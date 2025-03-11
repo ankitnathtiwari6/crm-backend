@@ -3,6 +3,41 @@ import asyncHandler from "../utils/asyncHandler";
 import Lead from "../models/Lead";
 import ChatHistory from "../models/ChatHistory";
 import { extractPersonData } from "../utils/gemini";
+import axios from "axios";
+
+// Function to send template message to new leads
+const sendWelcomeTemplate = async (
+  leadPhoneNumber: string,
+  businessPhoneId: string
+) => {
+  try {
+    const response = await axios({
+      method: "post",
+      url: `https://graph.facebook.com/v22.0/${businessPhoneId}/messages`,
+      headers: {
+        Authorization: `Bearer ${process.env.WHATSAPP_ACCESS_TOKEN}`,
+        "Content-Type": "application/json",
+      },
+      data: {
+        messaging_product: "whatsapp",
+        to: leadPhoneNumber,
+        type: "template",
+        template: {
+          name: "order_confirmation_3",
+          language: {
+            code: "en_US",
+          },
+        },
+      },
+    });
+
+    console.log("Template message sent successfully:", response.data);
+    return response.data;
+  } catch (error) {
+    console.error("Error sending template message:", error);
+    throw error;
+  }
+};
 
 export const verifyWebhook = (req: Request, res: Response) => {
   const mode = req.query["hub.mode"];
@@ -49,8 +84,7 @@ export const processWebhook = asyncHandler(
 
                 console.log("lead", leadPhoneNumber, messageBody);
 
-                // Update or create lead with the new chat message
-                const lead = await updateLeadWithChatMessage(
+                const { lead, isNewLead } = await updateLeadWithChatMessage(
                   leadPhoneNumber,
                   businessPhoneNumber,
                   businessPhoneId,
@@ -62,52 +96,66 @@ export const processWebhook = asyncHandler(
                   }
                 );
 
-                // Use existing extractPersonData function for NLP processing
-                const extractedData = await extractPersonData(messageBody);
+                // Skip extractPersonData for new leads
+                if (!isNewLead) {
+                  // For existing leads, create a conversation string from chat history
+                  const conversationString = createConversationString(
+                    lead.chatHistory,
+                    messageBody
+                  );
+                  console.log(
+                    "Conversation string for extractPersonData:",
+                    conversationString
+                  );
 
-                console.log("extractedData", extractedData);
-                if (extractedData && typeof extractedData === "object") {
-                  const updateFields: any = {};
+                  // Use extractPersonData with the full conversation context
+                  const extractedData =
+                    await extractPersonData(conversationString);
 
-                  // Only update fields that aren't already present in the lead
-                  if (extractedData.preferredCountry) {
-                    updateFields.preferredCountry =
-                      extractedData.preferredCountry;
-                  }
+                  console.log("extractedData", extractedData);
+                  if (extractedData && typeof extractedData === "object") {
+                    const updateFields: any = {};
 
-                  if (extractedData.city) {
-                    updateFields.city = extractedData.city;
-                  }
+                    // Only update fields that aren't already present in the lead
+                    if (extractedData.preferredCountry) {
+                      updateFields.preferredCountry =
+                        extractedData.preferredCountry;
+                    }
 
-                  if (extractedData.state) {
-                    updateFields.state = extractedData.state;
-                  }
+                    if (extractedData.city) {
+                      updateFields.city = extractedData.city;
+                    }
 
-                  if (extractedData.neetScore) {
-                    updateFields.neetScore = extractedData.neetScore;
-                  }
+                    if (extractedData.state) {
+                      updateFields.state = extractedData.state;
+                    }
 
-                  if (extractedData.name && !lead.name) {
-                    updateFields.name = extractedData.name;
-                  }
+                    if (extractedData.neetScore) {
+                      updateFields.neetScore = extractedData.neetScore;
+                    }
 
-                  if (extractedData.numberOfEnquiry) {
-                    // For numberOfEnquiry, increment if it exists
-                    updateFields.numberOfEnquiry =
-                      (lead.numberOfEnquiry || 0) + 1;
-                  }
+                    if (extractedData.name && !lead.name) {
+                      updateFields.name = extractedData.name;
+                    }
 
-                  console.log("updateFields", updateFields);
-                  // If we have fields to update, apply the update
-                  if (Object.keys(updateFields).length > 0) {
-                    await Lead.updateOne(
-                      { _id: lead._id },
-                      { $set: updateFields }
-                    );
-                    console.log(
-                      `Updated lead with extracted data for ${lead.leadPhoneNumber}:`,
-                      updateFields
-                    );
+                    if (extractedData.numberOfEnquiry) {
+                      // For numberOfEnquiry, increment if it exists
+                      updateFields.numberOfEnquiry =
+                        (lead.numberOfEnquiry || 0) + 1;
+                    }
+
+                    console.log("updateFields", updateFields);
+                    // If we have fields to update, apply the update
+                    if (Object.keys(updateFields).length > 0) {
+                      await Lead.updateOne(
+                        { _id: lead._id },
+                        { $set: updateFields }
+                      );
+                      console.log(
+                        `Updated lead with extracted data for ${lead.leadPhoneNumber}:`,
+                        updateFields
+                      );
+                    }
                   }
                 }
 
@@ -169,7 +217,7 @@ const extractMediaContent = (message: any): string => {
 };
 
 /**
- * Update lead with new chat message
+ * Update lead with new chat message and send welcome template if it's a new lead
  */
 const updateLeadWithChatMessage = async (
   leadPhoneNumber: string,
@@ -189,7 +237,10 @@ const updateLeadWithChatMessage = async (
       businessPhoneNumber,
     });
 
+    let isNewLead = false;
+
     if (!lead) {
+      isNewLead = true;
       // Create new lead if not exists
       lead = await Lead.create({
         leadPhoneNumber,
@@ -204,6 +255,38 @@ const updateLeadWithChatMessage = async (
         chatHistory: [message],
       });
       console.log(`New lead created: ${leadPhoneNumber}`);
+
+      // Send welcome template message to new lead
+      try {
+        console.log(`Sending welcome template to new lead: ${leadPhoneNumber}`);
+        const templateResponse = await sendWelcomeTemplate(
+          leadPhoneNumber,
+          businessPhoneId
+        );
+
+        // Add template message to chat history
+        const templateMessage = {
+          messageId:
+            templateResponse.messages?.[0]?.id || `template_${Date.now()}`,
+          content: "[Order confirmation template message]",
+          role: "assistant" as "assistant" | "lead",
+          timestamp: new Date(),
+          status: "sent" as "sent" | "delivered" | "read" | "failed",
+        };
+
+        lead.chatHistory.push(templateMessage);
+        lead.messageCount = 2; // Initial message + template message
+        await lead.save();
+
+        console.log(
+          `Template message added to chat history for new lead ${leadPhoneNumber}`
+        );
+      } catch (templateError) {
+        console.error(
+          `Failed to send template message to ${leadPhoneNumber}:`,
+          templateError
+        );
+      }
     } else {
       // Update existing lead
       lead.lastInteraction = message.timestamp;
@@ -218,11 +301,35 @@ const updateLeadWithChatMessage = async (
       console.log(`Lead updated: ${leadPhoneNumber}`);
     }
 
-    return lead;
+    return { lead, isNewLead };
   } catch (error) {
     console.error("Error updating lead with chat message:", error);
     throw error;
   }
+};
+
+/**
+ * Create a formatted conversation string from chat history
+ */
+const createConversationString = (
+  chatHistory: Array<any>,
+  currentMessage: string
+): string => {
+  // Only use the most recent messages (last 10) to keep the context manageable
+  const recentMessages = chatHistory.slice(-10);
+
+  // Format the conversation as a string with role labels
+  let conversationString = recentMessages
+    .map((msg) => {
+      const role = msg.role === "lead" ? "lead" : "assistant";
+      return `${role}: "${msg.content}"`;
+    })
+    .join("\n");
+
+  // Add the current message (which might not be in the chat history yet)
+  conversationString += `\nlead: "${currentMessage}"`;
+
+  return conversationString;
 };
 
 /**

@@ -264,11 +264,22 @@ const updateLeadWithChatMessage = async (
           businessPhoneId
         );
 
+        const order_confirmation_4_template_message = `Thanks for contacting!  
+I’m Jiya from Global Grads. 😊  
+
+To proceed, please share the following details:  
+- **Name:**  
+- **City/State:**  
+- **Preferred Country:**  
+- **NEET Score:**  
+
+Thank you, and have a nice day! 🌸`;
+
         // Add template message to chat history
         const templateMessage = {
           messageId:
             templateResponse.messages?.[0]?.id || `template_${Date.now()}`,
-          content: "[Order confirmation template message]",
+          content: order_confirmation_4_template_message,
           role: "assistant" as "assistant" | "lead",
           timestamp: new Date(),
           status: "sent" as "sent" | "delivered" | "read" | "failed",

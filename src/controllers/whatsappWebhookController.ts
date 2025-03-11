@@ -23,7 +23,7 @@ const sendWelcomeTemplate = async (
         to: leadPhoneNumber,
         type: "template",
         template: {
-          name: "order_confirmation_3",
+          name: "order_confirmation_4",
           language: {
             code: "en_US",
           },

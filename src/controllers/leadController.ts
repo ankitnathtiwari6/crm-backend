@@ -1,24 +1,17 @@
-// controllers/leadController.ts
 import { Request, Response } from "express";
 import Lead from "../models/Lead";
 import asyncHandler from "../utils/asyncHandler";
 import User from "../models/User";
 
-/**
- * Get leads with pagination and filtering
- * @route GET /api/leads
- * @access Private
- */
 export const getLeads = asyncHandler(async (req: Request, res: Response) => {
   try {
+    console.log("sdfdsfs");
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 20;
     const skip = (page - 1) * limit;
 
-    // Build filter object based on query parameters
     const filter: any = {};
 
-    // Search functionality
     if (req.query.search) {
       const searchRegex = new RegExp(req.query.search as string, "i");
       filter.$or = [
@@ -28,7 +21,6 @@ export const getLeads = asyncHandler(async (req: Request, res: Response) => {
       ];
     }
 
-    // NEET score filtering
     if (req.query.neetStatus) {
       if (req.query.neetStatus === "withScore") {
         filter.neetScore = { $exists: true, $ne: null };
@@ -37,7 +29,6 @@ export const getLeads = asyncHandler(async (req: Request, res: Response) => {
       }
     }
 
-    // NEET score range filtering
     if (req.query.minScore && req.query.maxScore) {
       filter.neetScore = {
         $gte: parseInt(req.query.minScore as string),
@@ -115,6 +106,23 @@ export const getLeads = asyncHandler(async (req: Request, res: Response) => {
     // Count total documents for pagination
     const total = await Lead.countDocuments(filter);
 
+    // Get today's leads count
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    console.log("Today date range:", today, "to", tomorrow);
+
+    const todayLeadsCount = await Lead.countDocuments({
+      createdAt: {
+        $gte: today,
+        $lt: tomorrow,
+      },
+    });
+
+    console.log("Today's leads count calculated:", todayLeadsCount);
+
     // Fetch leads with pagination and sorting
     const leads = await Lead.find(filter)
       .sort({ lastInteraction: -1 }) // Sort by most recent interaction
@@ -148,14 +156,25 @@ export const getLeads = asyncHandler(async (req: Request, res: Response) => {
       updatedAt: lead.updatedAt,
     }));
 
-    res.status(200).json({
+    // Create response object
+    const responseObj = {
       success: true,
       leads: transformedLeads,
       page,
       limit,
       totalPages: Math.ceil(total / limit),
       totalLeads: total,
-    });
+      todayLeadsCount,
+    };
+
+    console.log(
+      "Response includes todayLeadsCount:",
+      responseObj.hasOwnProperty("todayLeadsCount"),
+      "with value:",
+      responseObj.todayLeadsCount
+    );
+
+    res.status(200).json(responseObj);
   } catch (error) {
     console.error("Error fetching leads:", error);
     res.status(500).json({

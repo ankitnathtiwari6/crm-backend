@@ -55,8 +55,8 @@ const AssignedToSchema: Schema = new Schema({
 // Define the Lead document interface
 export interface ILead extends Document {
   leadPhoneNumber: string;
-  businessPhoneNumber: string;
-  businessPhoneId: string;
+  businessPhoneNumber?: string;
+  businessPhoneId?: string;
   name?: string;
   email?: string;
   preferredCountry?: string;
@@ -88,12 +88,10 @@ const LeadSchema: Schema = new Schema(
     },
     businessPhoneNumber: {
       type: String,
-      required: true,
       index: true,
     },
     businessPhoneId: {
       type: String,
-      required: true,
     },
     name: {
       type: String,

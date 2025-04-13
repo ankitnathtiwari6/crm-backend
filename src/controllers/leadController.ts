@@ -316,3 +316,64 @@ export const getUsers = asyncHandler(async (req: Request, res: Response) => {
     });
   }
 });
+
+/**
+ * Create a new lead
+ * @route POST /api/leads
+ * @access Private
+ */
+export const createLead = asyncHandler(async (req: Request, res: Response) => {
+  try {
+    const {
+      name,
+      city,
+      phoneNumber,
+      neetStatus,
+      source = "website",
+    } = req.body;
+
+    // Validate required fields
+    if (!phoneNumber) {
+      return res.status(400).json({
+        success: false,
+        message: "Phone number is required",
+      });
+    }
+
+    // Check if lead already exists with this phone number
+    const existingLead = await Lead.findOne({ leadPhoneNumber: phoneNumber });
+    if (existingLead) {
+      return res.status(400).json({
+        success: false,
+        message: "Lead with this phone number already exists",
+      });
+    }
+
+    // Create new lead
+    const newLead = new Lead({
+      leadPhoneNumber: phoneNumber,
+      businessPhoneNumber: process.env.DEFAULT_BUSINESS_PHONE || "", // Set a default or get from env
+      businessPhoneId: process.env.DEFAULT_BUSINESS_PHONE_ID || "", // Set a default or get from env
+      name: name || "Unknown",
+      city: city || null,
+      source: source,
+      numberOfEnquiry: 1,
+      firstInteraction: new Date(),
+      lastInteraction: new Date(),
+    });
+
+    const savedLead = await newLead.save();
+
+    res.status(201).json({
+      success: true,
+      lead: savedLead,
+    });
+  } catch (error) {
+    console.error("Error creating lead:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error creating lead",
+      error: (error as Error).message,
+    });
+  }
+});

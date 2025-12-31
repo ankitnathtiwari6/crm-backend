@@ -1,0 +1,49 @@
+# Node modules
+node_modules
+npm-debug.log
+yarn-error.log
+
+# Build output (will be generated in Docker)
+dist
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Git
+.git
+.gitignore
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*.swn
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+logs
+*.log
+
+# Testing
+coverage
+.nyc_output
+
+# Documentation
+README.md
+*.md
+
+# Docker files (no need to copy them into image)
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Misc
+.editorconfig
+.eslintrc
+.prettierrc

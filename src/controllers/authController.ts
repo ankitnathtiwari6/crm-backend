@@ -65,6 +65,7 @@ export const loginUser = asyncHandler(async (req: Request, res: Response) => {
       "ankitnathtiwari@gmail.com",
       "imarpitjaiswal@gmail.com",
       "priyamishra7.p@gmail.com",
+      "meenarai310@gmail.com",
     ];
 
     // Check required fields

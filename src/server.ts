@@ -40,6 +40,11 @@ app.get("/", (req, res) => {
   res.send("API is running...");
 });
 
+// Health check endpoint
+app.get("/health", (_req, res) => {
+  res.status(200).json({ status: "ok", timestamp: new Date().toISOString() });
+});
+
 // Error handling middleware
 app.use(notFound);
 app.use(errorHandler);

@@ -107,6 +107,22 @@ else
     print_status "Docker already installed ($(docker --version))"
 fi
 
+# Configure Docker daemon with registry mirror (fixes Docker Hub timeout on BLR region)
+echo -e "${YELLOW}Configuring Docker registry mirror...${NC}"
+cat > /etc/docker/daemon.json << 'EOF'
+{
+  "registry-mirrors": ["https://mirror.gcr.io"],
+  "log-driver": "json-file",
+  "log-opts": {
+    "max-size": "10m",
+    "max-file": "3"
+  }
+}
+EOF
+systemctl restart docker
+sleep 3
+print_status "Docker daemon configured with registry mirror"
+
 # ═══════════════════════════════════════════════════════════════
 # STEP 3 — Install Docker Compose
 # ═══════════════════════════════════════════════════════════════

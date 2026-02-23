@@ -1,0 +1,62 @@
+name: Deploy to DigitalOcean
+
+on:
+  push:
+    branches:
+      - main
+      - master
+
+jobs:
+  deploy:
+    name: Deploy via SSH
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy to server
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          # These are set as env vars on the remote SSH session via `envs` below.
+          # Using printf to write them prevents any $ expansion issues in secret values.
+          E_PORT:                     ${{ secrets.PORT }}
+          E_NODE_ENV:                 ${{ secrets.NODE_ENV }}
+          E_LOG_LEVEL:                ${{ secrets.LOG_LEVEL }}
+          E_JWT_SECRET:               ${{ secrets.JWT_SECRET }}
+          E_MONGODB_URI:              ${{ secrets.MONGODB_URI }}
+          E_WHATSAPP_ACCESS_TOKEN:    ${{ secrets.WHATSAPP_ACCESS_TOKEN }}
+          E_WHATSAPP_PHONE_NUMBER_ID: ${{ secrets.WHATSAPP_PHONE_NUMBER_ID }}
+          E_WHATSAPP_VERIFY_TOKEN:    ${{ secrets.WHATSAPP_VERIFY_TOKEN }}
+          E_GEMINI_API_KEY:           ${{ secrets.GEMINI_API_KEY }}
+        with:
+          host: 68.183.86.63
+          username: root
+          key: ${{ secrets.DO_SSH_PRIVATE_KEY }}
+          envs: E_PORT,E_NODE_ENV,E_LOG_LEVEL,E_JWT_SECRET,E_MONGODB_URI,E_WHATSAPP_ACCESS_TOKEN,E_WHATSAPP_PHONE_NUMBER_ID,E_WHATSAPP_VERIFY_TOKEN,E_GEMINI_API_KEY
+          script: |
+            set -e
+            APP_DIR="/root/crm-backend"
+
+            # ── Write .env safely (printf avoids $ expansion in values) ──
+            {
+              printf 'PORT=%s\n'                     "$E_PORT"
+              printf 'NODE_ENV=%s\n'                 "$E_NODE_ENV"
+              printf 'LOG_LEVEL=%s\n'                "$E_LOG_LEVEL"
+              printf 'JWT_SECRET=%s\n'               "$E_JWT_SECRET"
+              printf 'MONGODB_URI=%s\n'              "$E_MONGODB_URI"
+              printf 'WHATSAPP_ACCESS_TOKEN=%s\n'    "$E_WHATSAPP_ACCESS_TOKEN"
+              printf 'WHATSAPP_PHONE_NUMBER_ID=%s\n' "$E_WHATSAPP_PHONE_NUMBER_ID"
+              printf 'WHATSAPP_VERIFY_TOKEN=%s\n'    "$E_WHATSAPP_VERIFY_TOKEN"
+              printf 'GEMINI_API_KEY=%s\n'           "$E_GEMINI_API_KEY"
+            } > "$APP_DIR/.env"
+
+            # ── Pull latest code ──────────────────────────────────────────
+            cd "$APP_DIR"
+            git fetch origin
+            git reset --hard origin/$(git symbolic-ref --short HEAD)
+
+            # ── Rebuild and restart container ─────────────────────────────
+            docker-compose down --remove-orphans || true
+            docker-compose up -d --build
+
+            # ── Show status ───────────────────────────────────────────────
+            sleep 5
+            docker-compose ps

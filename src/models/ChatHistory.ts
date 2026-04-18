@@ -37,6 +37,8 @@ const MessageSchema: Schema = new Schema({
 
 // Define the ChatHistory document interface
 export interface IChatHistory extends Document {
+  leadId?: mongoose.Types.ObjectId;
+  companyId?: mongoose.Types.ObjectId;
   leadPhoneNumber: string;
   businessPhoneNumber: string;
   messages: IMessage[];
@@ -47,6 +49,16 @@ export interface IChatHistory extends Document {
 // Define the ChatHistory schema
 const ChatHistorySchema: Schema = new Schema(
   {
+    leadId: {
+      type: Schema.Types.ObjectId,
+      ref: "Lead",
+      index: true,
+    },
+    companyId: {
+      type: Schema.Types.ObjectId,
+      ref: "Company",
+      index: true,
+    },
     leadPhoneNumber: {
       type: String,
       required: true,

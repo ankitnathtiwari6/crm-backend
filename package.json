@@ -15,7 +15,9 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@agendajs/mongo-backend": "^4.0.1",
     "@google/generative-ai": "^0.24.0",
+    "agenda": "^6.2.4",
     "axios": "^1.8.1",
     "bcrypt": "^5.1.1",
     "bcryptjs": "^3.0.2",
@@ -26,10 +28,12 @@
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.11.0",
     "morgan": "^1.10.0",
+    "openai": "^6.34.0",
     "uuid": "^11.1.0",
     "winston": "^3.17.0"
   },
   "devDependencies": {
+    "@types/agenda": "^3.0.2",
     "@types/bcrypt": "^5.0.2",
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.0",

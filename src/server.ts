@@ -9,6 +9,9 @@ import { notFound, errorHandler } from "./middleware/errorMiddleware";
 import whatsappWebhookRoutes from "./routes/whatsappWebhookRoutes";
 import leadRoutes from "./routes/leadRoutes";
 import authRoutes from "./routes/authRoutes";
+import companyRoutes from "./routes/companyRoutes";
+import agenda from "./jobs/agenda";
+import { defineFollowUpJob } from "./jobs/followUpJob";
 // Load environment variables
 dotenv.config();
 
@@ -34,6 +37,11 @@ if (process.env.NODE_ENV === "development") {
 app.use("/api/webhook", whatsappWebhookRoutes);
 app.use("/api/leads", leadRoutes);
 app.use("/api/auth", authRoutes);
+app.use("/api/companies", companyRoutes);
+
+// Start Agenda job scheduler
+defineFollowUpJob();
+agenda.start().then(() => console.log("Agenda scheduler started"));
 
 // Basic route
 app.get("/", (req, res) => {

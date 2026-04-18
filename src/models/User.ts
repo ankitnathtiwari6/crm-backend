@@ -1,5 +1,5 @@
 // models/User.ts
-import mongoose, { Document, Schema } from "mongoose";
+import mongoose, { Document, Schema, Types } from "mongoose";
 import bcrypt from "bcryptjs";
 
 export interface IUser extends Document {
@@ -7,6 +7,8 @@ export interface IUser extends Document {
   name: string;
   email: string;
   password: string;
+  companyId?: mongoose.Types.ObjectId;
+  role: "admin" | "member";
   comparePassword(candidatePassword: string): Promise<boolean>;
 }
 
@@ -32,7 +34,17 @@ const UserSchema = new Schema<IUser>(
       type: String,
       required: [true, "Password is required"],
       minlength: [6, "Password must be at least 6 characters long"],
-      select: false, // Don't include password in query results by default
+      select: false,
+    },
+    companyId: {
+      type: Schema.Types.ObjectId,
+      ref: "Company",
+      index: true,
+    },
+    role: {
+      type: String,
+      enum: ["admin", "member"],
+      default: "member",
     },
   },
   {

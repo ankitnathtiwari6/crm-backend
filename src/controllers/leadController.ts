@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import Lead from "../models/Lead";
+import ChatHistory from "../models/ChatHistory";
 import asyncHandler from "../utils/asyncHandler";
 import User from "../models/User";
 
@@ -201,9 +202,18 @@ export const getLeadById = asyncHandler(async (req: Request, res: Response) => {
       });
     }
 
+    // Prefer ChatHistory collection; fall back to embedded chatHistory for old leads
+    const chatDoc = await ChatHistory.findOne({ leadId: lead._id });
+    const chatHistory = chatDoc
+      ? chatDoc.messages
+      : lead.chatHistory;
+
     res.status(200).json({
       success: true,
-      lead,
+      lead: {
+        ...lead.toObject(),
+        chatHistory,
+      },
     });
   } catch (error) {
     console.error("Error fetching lead details:", error);

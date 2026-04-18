@@ -54,15 +54,26 @@ const AssignedToSchema: Schema = new Schema({
 
 // Define the Lead document interface
 export interface ILead extends Document {
+  companyId?: mongoose.Types.ObjectId;
   leadPhoneNumber: string;
   businessPhoneNumber?: string;
   businessPhoneId?: string;
+  // Who contacted
+  contactType?: "student" | "father" | "mother" | "brother" | "sister" | "guardian" | "friend" | "unknown";
+  // Name of the person who contacted (may differ from student)
   name?: string;
+  // Student's name (if contact is a parent/guardian, not the student)
+  studentName?: string;
   email?: string;
   preferredCountry?: string;
+  preferredCollege?: string;
   city?: string;
   state?: string;
   neetScore?: number | null;
+  neetYear?: number;
+  qualification?: "12th_appearing" | "12th_passed" | "dropper" | "other";
+  targetYear?: number;
+  budget?: string;
   assignedTo?: IAssignedTo;
   numberOfEnquiry: number;
   numberOfChatsMessages: number;
@@ -74,6 +85,10 @@ export interface ILead extends Document {
   source?: string;
   notes?: string;
   chatHistory: IMessage[];
+  // Follow-up sequence tracking
+  followUpStep?: number;
+  followUpJobId?: string;
+  followUpStartedAt?: Date;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -81,6 +96,11 @@ export interface ILead extends Document {
 // Define the Lead schema
 const LeadSchema: Schema = new Schema(
   {
+    companyId: {
+      type: Schema.Types.ObjectId,
+      ref: "Company",
+      index: true,
+    },
     leadPhoneNumber: {
       type: String,
       required: true,
@@ -93,13 +113,24 @@ const LeadSchema: Schema = new Schema(
     businessPhoneId: {
       type: String,
     },
+    contactType: {
+      type: String,
+      enum: ["student", "father", "mother", "brother", "sister", "guardian", "friend", "unknown"],
+      default: "unknown",
+    },
     name: {
+      type: String,
+    },
+    studentName: {
       type: String,
     },
     email: {
       type: String,
     },
     preferredCountry: {
+      type: String,
+    },
+    preferredCollege: {
       type: String,
     },
     city: {
@@ -111,6 +142,19 @@ const LeadSchema: Schema = new Schema(
     neetScore: {
       type: Number,
       default: null,
+    },
+    neetYear: {
+      type: Number,
+    },
+    qualification: {
+      type: String,
+      enum: ["12th_appearing", "12th_passed", "dropper", "other"],
+    },
+    targetYear: {
+      type: Number,
+    },
+    budget: {
+      type: String,
     },
     assignedTo: {
       id: {
@@ -153,6 +197,9 @@ const LeadSchema: Schema = new Schema(
       type: String,
     },
     chatHistory: [MessageSchema],
+    followUpStep: { type: Number },
+    followUpJobId: { type: String },
+    followUpStartedAt: { type: Date },
   },
   {
     timestamps: true,

@@ -1,0 +1,14 @@
+name: Test Webhook Reachability
+on: workflow_dispatch
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Test webhook from US runner
+        run: |
+          echo "Runner IP:"
+          curl -s ifconfig.me
+          echo ""
+          echo "Testing webhook endpoint:"
+          curl -v "https://api.globalgrads.in/api/webhook?hub.mode=subscribe&hub.verify_token=12345&hub.challenge=github_test_123" 2>&1

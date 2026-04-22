@@ -28,7 +28,7 @@ jobs:
           E_GEMINI_API_KEY:           ${{ secrets.GEMINI_API_KEY }}
           E_OPENAI_API_KEY:           ${{ secrets.OPENAI_API_KEY }}
         with:
-          host: 68.183.86.63
+          host: 198.199.68.200
           username: root
           key: ${{ secrets.DO_SSH_PRIVATE_KEY }}
           envs: E_PORT,E_NODE_ENV,E_LOG_LEVEL,E_JWT_SECRET,E_MONGODB_URI,E_WHATSAPP_ACCESS_TOKEN,E_WHATSAPP_PHONE_NUMBER_ID,E_WHATSAPP_VERIFY_TOKEN,E_GEMINI_API_KEY,E_OPENAI_API_KEY

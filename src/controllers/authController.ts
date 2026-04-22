@@ -126,7 +126,6 @@ export const loginUser = asyncHandler(async (req: Request, res: Response) => {
 export const getCurrentUser = asyncHandler(
   async (req: Request, res: Response) => {
     try {
-      console.log("get current user");
       // The user object is attached to the request by the auth middleware
       const user = await User.findById((req as any).user.id);
 

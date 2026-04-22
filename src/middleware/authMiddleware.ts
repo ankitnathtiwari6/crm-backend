@@ -12,7 +12,6 @@ interface JwtPayload {
 export const protect = asyncHandler(
   async (req: Request, res: Response, next: NextFunction) => {
     let token;
-    console.log(token);
     // Check if token exists in headers
     if (
       req.headers.authorization &&

@@ -62,9 +62,7 @@ app.listen(PORT, () => {
   console.log(`Server running in ${process.env.NODE_ENV} mode on port ${PORT}`);
 });
 
-// Handle unhandled promise rejections
+// Handle unhandled promise rejections — log but do NOT exit (crashing kills all active connections)
 process.on("unhandledRejection", (err: Error) => {
-  console.log(`Error: ${err.message}`);
-  // Close server & exit process
-  process.exit(1);
+  console.error(`Unhandled rejection: ${err?.message ?? err}`);
 });

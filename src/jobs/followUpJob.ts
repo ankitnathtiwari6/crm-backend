@@ -204,7 +204,7 @@ export const scheduleFollowUp = async (
 
 export const cancelFollowUp = async (leadId: string): Promise<void> => {
   const cancelled = await agenda.cancel({ name: JOB_NAME, data: { leadId } });
-  if (cancelled > 0) {
+  if ((cancelled ?? 0) > 0) {
     console.log(`[FollowUp] Cancelled pending job for ${leadId}`);
   }
   await clearFollowUp(leadId);

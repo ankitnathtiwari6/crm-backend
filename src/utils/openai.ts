@@ -3,7 +3,17 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
-const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+let client: OpenAI | null = null;
+
+const getClient = (): OpenAI => {
+  if (!client) {
+    if (!process.env.OPENAI_API_KEY) {
+      throw new Error("OPENAI_API_KEY is not set");
+    }
+    client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  }
+  return client;
+};
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -193,7 +203,7 @@ ${followUp.followUpStep <= 2
         content: msg.content,
       }));
 
-    const response = await client.chat.completions.create({
+    const response = await getClient().chat.completions.create({
       model: "gpt-5.4-mini-2026-03-17",
       messages: [
         { role: "system", content: SYSTEM_PROMPT + contextNote },

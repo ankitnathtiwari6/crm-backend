@@ -1,13 +1,12 @@
-import { Agenda } from "agenda";
-import { MongoBackend } from "@agendajs/mongo-backend";
+import Agenda from "agenda";
 import dotenv from "dotenv";
 dotenv.config();
 
 const agenda = new Agenda({
-  backend: new MongoBackend({
+  db: {
     address: process.env.MONGODB_URI!,
     collection: "agendaJobs",
-  }),
+  },
   processEvery: "30 seconds",
   maxConcurrency: 5,
   defaultConcurrency: 2,

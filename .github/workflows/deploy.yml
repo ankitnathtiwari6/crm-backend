@@ -26,11 +26,12 @@ jobs:
           E_WHATSAPP_PHONE_NUMBER_ID: ${{ secrets.WHATSAPP_PHONE_NUMBER_ID }}
           E_WHATSAPP_VERIFY_TOKEN:    ${{ secrets.WHATSAPP_VERIFY_TOKEN }}
           E_GEMINI_API_KEY:           ${{ secrets.GEMINI_API_KEY }}
+          E_OPENAI_API_KEY:           ${{ secrets.OPENAI_API_KEY }}
         with:
           host: 68.183.86.63
           username: root
           key: ${{ secrets.DO_SSH_PRIVATE_KEY }}
-          envs: E_PORT,E_NODE_ENV,E_LOG_LEVEL,E_JWT_SECRET,E_MONGODB_URI,E_WHATSAPP_ACCESS_TOKEN,E_WHATSAPP_PHONE_NUMBER_ID,E_WHATSAPP_VERIFY_TOKEN,E_GEMINI_API_KEY
+          envs: E_PORT,E_NODE_ENV,E_LOG_LEVEL,E_JWT_SECRET,E_MONGODB_URI,E_WHATSAPP_ACCESS_TOKEN,E_WHATSAPP_PHONE_NUMBER_ID,E_WHATSAPP_VERIFY_TOKEN,E_GEMINI_API_KEY,E_OPENAI_API_KEY
           script: |
             set -e
             APP_DIR="/root/crm-backend"
@@ -46,6 +47,7 @@ jobs:
               printf 'WHATSAPP_PHONE_NUMBER_ID=%s\n' "$E_WHATSAPP_PHONE_NUMBER_ID"
               printf 'WHATSAPP_VERIFY_TOKEN=%s\n'    "$E_WHATSAPP_VERIFY_TOKEN"
               printf 'GEMINI_API_KEY=%s\n'           "$E_GEMINI_API_KEY"
+              printf 'OPENAI_API_KEY=%s\n'           "$E_OPENAI_API_KEY"
             } > "$APP_DIR/.env"
 
             # ── Pull latest code ──────────────────────────────────────────
@@ -57,6 +59,16 @@ jobs:
             docker-compose down --remove-orphans || true
             docker-compose up -d --build
 
+            # ── Wait for container to be healthy ──────────────────────────
+            echo "Waiting for backend to be healthy..."
+            TRIES=0
+            until docker exec crm-backend node -e "require('http').get('http://localhost:${E_PORT:-3000}/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})" 2>/dev/null; do
+              TRIES=$((TRIES + 1))
+              [ $TRIES -ge 20 ] && { echo "Backend did not become healthy in time"; docker-compose logs --tail 30; exit 1; }
+              echo "  Attempt $TRIES/20..."
+              sleep 5
+            done
+            echo "Backend is healthy"
+
             # ── Show status ───────────────────────────────────────────────
-            sleep 5
             docker-compose ps

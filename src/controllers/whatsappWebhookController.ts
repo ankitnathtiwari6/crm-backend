@@ -56,7 +56,14 @@ export const verifyWebhook = asyncHandler(async (req: Request, res: Response) =>
   if (!mode || !token) return res.sendStatus(400);
   if (mode !== "subscribe") return res.sendStatus(403);
 
-  // Find company whose active WhatsApp number has this verifyToken
+  // Accept the global env token as a valid fallback
+  const globalToken = process.env.WHATSAPP_VERIFY_TOKEN;
+  if (globalToken && token === globalToken) {
+    console.log("WEBHOOK_VERIFIED via global WHATSAPP_VERIFY_TOKEN");
+    return res.status(200).send(challenge);
+  }
+
+  // Otherwise look up the token against a company's stored verifyToken
   const company = await Company.findOne({
     whatsappNumbers: {
       $elemMatch: { verifyToken: token, isActive: true },

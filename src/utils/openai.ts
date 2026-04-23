@@ -37,6 +37,8 @@ export interface AgentResult {
   agentMessage: string;
   extractedData: Partial<LeadContext>;
   conversationComplete?: boolean;
+  leadQualityScore?: number;
+  leadQualityScoreReason?: string;
 }
 
 // ─── System prompt ────────────────────────────────────────────────────────────
@@ -106,11 +108,21 @@ Then you MUST:
 3. Keep the message short (3-4 lines max).
 Do NOT ask for more information after this point.
 
+LEAD QUALITY SCORE (update on every reply):
+Rate this lead from 0 to 100 based on engagement + information provided:
+- 80–100 (Hot): Actively engaged, gave most/all details, asking specific questions, clearly wants to proceed
+- 60–79 (Warm): Reasonably engaged, gave some details, seems genuinely interested
+- 40–59 (Neutral): Partial engagement, mixed signals, gave little info
+- 20–39 (Cold): Minimal replies, very little info, low engagement
+- 0–19 (Junk): No meaningful engagement, spam, wrong number, or completely unresponsive
+
 IMPORTANT OUTPUT FORMAT:
 You must always respond with a valid JSON object — no markdown, no code fences, raw JSON only:
 {
   "agentMessage": "your message to send to the user",
   "conversationComplete": false,
+  "leadQualityScore": 65,
+  "leadQualityScoreReason": "Provided city and NEET score, asking relevant questions",
   "extractedData": {
     "contactType": "student|father|mother|brother|sister|guardian|friend|unknown or null",
     "name": "name of the person contacting or null",
@@ -241,25 +253,21 @@ Keep it friendly — 4 to 6 lines total.`;
     const raw = response.choices[0]?.message?.content?.trim() ?? "";
 
     // Parse JSON response
+    const parseResult = (parsed: any): AgentResult => ({
+      agentMessage: parsed.agentMessage ?? "I'm here to help! Could you share a bit more about yourself?",
+      extractedData: sanitizeExtracted(parsed.extractedData ?? {}),
+      conversationComplete: parsed.conversationComplete === true,
+      leadQualityScore: typeof parsed.leadQualityScore === "number" ? Math.min(100, Math.max(0, parsed.leadQualityScore)) : undefined,
+      leadQualityScoreReason: parsed.leadQualityScoreReason ?? undefined,
+    });
+
     try {
-      const parsed = JSON.parse(raw);
-      return {
-        agentMessage: parsed.agentMessage ?? "I'm here to help! Could you share a bit more about yourself?",
-        extractedData: sanitizeExtracted(parsed.extractedData ?? {}),
-        conversationComplete: parsed.conversationComplete === true,
-      };
+      return parseResult(JSON.parse(raw));
     } catch {
-      // If model added markdown fences, strip them
       const cleaned = raw.replace(/^```json\s*/i, "").replace(/```\s*$/, "").trim();
       try {
-        const parsed = JSON.parse(cleaned);
-        return {
-          agentMessage: parsed.agentMessage ?? "I'm here to help! Could you share a bit more?",
-          extractedData: sanitizeExtracted(parsed.extractedData ?? {}),
-          conversationComplete: parsed.conversationComplete === true,
-        };
+        return parseResult(JSON.parse(cleaned));
       } catch {
-        // Fallback: treat entire response as the message
         console.error("Could not parse agent JSON, using raw text:", raw);
         return { agentMessage: raw, extractedData: {}, conversationComplete: false };
       }

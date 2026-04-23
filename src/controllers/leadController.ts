@@ -151,7 +151,11 @@ export const getLeads = asyncHandler(async (req: Request, res: Response) => {
       tags: lead.tags || [],
       source: lead.source || "WhatsApp",
       notes: lead.notes || null,
-      chatHistory: lead.chatHistory || [], // Include chat history in the response
+      chatHistory: lead.chatHistory || [],
+      sessions: lead.sessions || [],
+      leadQualityScore: lead.leadQualityScore ?? null,
+      leadQualityScoreReason: lead.leadQualityScoreReason ?? null,
+      leadQualityScoreUpdatedAt: lead.leadQualityScoreUpdatedAt ?? null,
       createdAt: lead.createdAt,
       updatedAt: lead.updatedAt,
     }));

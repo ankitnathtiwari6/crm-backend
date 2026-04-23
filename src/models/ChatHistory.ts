@@ -8,6 +8,7 @@ interface IMessage {
   role: "lead" | "assistant";
   timestamp: Date;
   status?: "sent" | "delivered" | "read" | "failed";
+  sessionId?: string;
 }
 
 // Define the Message schema
@@ -32,6 +33,9 @@ const MessageSchema: Schema = new Schema({
   status: {
     type: String,
     enum: ["sent", "delivered", "read", "failed"],
+  },
+  sessionId: {
+    type: String,
   },
 });
 

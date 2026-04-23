@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import asyncHandler from "../utils/asyncHandler";
-import Lead from "../models/Lead";
+import Lead, { ISession } from "../models/Lead";
 import Company from "../models/Company";
 import ChatHistory from "../models/ChatHistory";
 import { runCounselorAgent, LeadContext } from "../utils/openai";
@@ -161,7 +161,7 @@ const handleIncomingMessages = async (body: any) => {
           // 1. Show read receipt (blue ticks)
           await markAsRead(messageId, businessPhoneId, accessToken);
 
-          // 2. Upsert lead (no chat embedded) + push incoming msg to ChatHistory
+          // 2. Upsert lead
           const lead = await upsertLead(
             leadPhoneNumber,
             businessPhoneNumber,
@@ -169,19 +169,23 @@ const handleIncomingMessages = async (body: any) => {
             companyId
           );
 
-          const incomingMsg = { messageId, content: messageBody, role: "lead" as const, timestamp };
+          // 3. Resolve active session (creates new one if needed)
+          const sessionId = await resolveSession((lead._id as any).toString(), lead.sessions ?? []);
+
+          // 4. Save incoming message tagged with sessionId
+          const incomingMsg = { messageId, content: messageBody, role: "lead" as const, timestamp, sessionId };
           await pushToChatHistory(lead._id, lead.leadPhoneNumber, lead.businessPhoneNumber!, companyId, incomingMsg);
 
           // Cancel any pending follow-up — user has replied
           await cancelFollowUp((lead._id as any).toString());
 
-          // 3. Fetch recent chat history from ChatHistory collection for agent context
+          // 5. Fetch last 20 messages across ALL sessions for agent context
           const chatDoc = await ChatHistory.findOne({ leadId: lead._id });
           const recentMessages = (chatDoc?.messages ?? [])
             .slice(-20)
             .map((m) => ({ role: m.role, content: m.content }));
 
-          // 4. Build lead context
+          // 6. Build lead context
           const leadContext: LeadContext = {
             contactType: lead.contactType,
             name: lead.name,
@@ -198,14 +202,15 @@ const handleIncomingMessages = async (body: any) => {
             email: lead.email,
           };
 
-          // 5. Run the counselor agent
-          const { agentMessage, extractedData, conversationComplete } = await runCounselorAgent(recentMessages, leadContext);
+          // 7. Run the counselor agent
+          const { agentMessage, extractedData, conversationComplete, leadQualityScore, leadQualityScoreReason } =
+            await runCounselorAgent(recentMessages, leadContext);
 
           console.log(`[${leadPhoneNumber}] Agent reply: ${agentMessage}`);
-          console.log(`[${leadPhoneNumber}] Extracted: ${JSON.stringify(extractedData)}`);
-          if (conversationComplete) console.log(`[${leadPhoneNumber}] Conversation marked complete — no follow-up will be scheduled`);
+          console.log(`[${leadPhoneNumber}] Quality score: ${leadQualityScore} — ${leadQualityScoreReason}`);
+          if (conversationComplete) console.log(`[${leadPhoneNumber}] Conversation complete`);
 
-          // 6. Send agent reply via WhatsApp
+          // 8. Send agent reply via WhatsApp
           let sentMsgId = `agent_${Date.now()}`;
           try {
             const sent = await sendWhatsappMessage(leadPhoneNumber, agentMessage, businessPhoneId, accessToken);
@@ -214,24 +219,25 @@ const handleIncomingMessages = async (body: any) => {
             console.error(`[${leadPhoneNumber}] Failed to send WhatsApp message:`, sendErr?.response?.data ?? sendErr.message);
           }
 
-          // 7. Save agent reply to ChatHistory collection
+          // 9. Save agent reply tagged with sessionId
           const agentMsg = {
             messageId: sentMsgId,
             content: agentMessage,
             role: "assistant" as const,
             timestamp: new Date(),
             status: "sent" as const,
+            sessionId,
           };
           await pushToChatHistory(lead._id, lead.leadPhoneNumber, lead.businessPhoneNumber!, companyId, agentMsg);
 
-          // 8. Schedule follow-up sequence (step 1 = 10 min from now) — skip if conversation is complete
+          // 10. Schedule or cancel follow-up
           if (conversationComplete) {
             await cancelFollowUp((lead._id as any).toString());
           } else {
             await scheduleFollowUp((lead._id as any).toString(), 1);
           }
 
-          // 9. Update lead counters + extracted fields (never overwrite existing values)
+          // 11. Update lead: counters + extracted fields + quality score + session messageCount
           const updateFields: any = {};
           for (const [key, val] of Object.entries(extractedData)) {
             const existing = (lead as any)[key];
@@ -240,16 +246,62 @@ const handleIncomingMessages = async (body: any) => {
               updateFields[key] = val;
             }
           }
-          await Lead.findByIdAndUpdate(lead._id, {
-            $inc: { messageCount: 2, numberOfChatsMessages: 2 },
+          if (leadQualityScore !== undefined) {
+            updateFields.leadQualityScore = leadQualityScore;
+            updateFields.leadQualityScoreReason = leadQualityScoreReason ?? "";
+            updateFields.leadQualityScoreUpdatedAt = new Date();
+          }
+
+          const sessionUpdate: any = {
+            $inc: { messageCount: 2, numberOfChatsMessages: 2, "sessions.$[s].messageCount": 2 },
             $set: { lastInteraction: new Date(), ...updateFields },
-          });
+          };
+          if (conversationComplete) {
+            sessionUpdate.$set["sessions.$[s].status"] = "complete";
+          }
+
+          await Lead.findByIdAndUpdate(
+            lead._id,
+            sessionUpdate,
+            { arrayFilters: [{ "s.sessionId": sessionId }] }
+          );
         } catch (err) {
           console.error(`[${leadPhoneNumber}] Error processing message:`, err);
         }
       }
     }
   }
+};
+
+// ─── Session management ───────────────────────────────────────────────────────
+
+const SESSION_MAX_MESSAGES = 55;
+const SESSION_MAX_DAYS = 7;
+
+const resolveSession = async (leadId: string, sessions: ISession[]): Promise<string> => {
+  const last = sessions[sessions.length - 1];
+  const now = Date.now();
+
+  if (last && last.status === "active") {
+    const ageDays = (now - new Date(last.startedAt).getTime()) / (1000 * 60 * 60 * 24);
+    if (last.messageCount < SESSION_MAX_MESSAGES && ageDays < SESSION_MAX_DAYS) {
+      return last.sessionId; // reuse existing session
+    }
+    // Expire it
+    await Lead.findByIdAndUpdate(
+      leadId,
+      { $set: { "sessions.$[s].status": "expired" } },
+      { arrayFilters: [{ "s.sessionId": last.sessionId }] }
+    );
+  }
+
+  // Create a new session
+  const newSessionId = `sess_${now}_${Math.random().toString(36).slice(2, 7)}`;
+  await Lead.findByIdAndUpdate(leadId, {
+    $push: { sessions: { sessionId: newSessionId, startedAt: new Date(), messageCount: 0, status: "active" } },
+  });
+  console.log(`[Session] New session ${newSessionId} for lead ${leadId}`);
+  return newSessionId;
 };
 
 // ─── Lead upsert (no embedded chat) ──────────────────────────────────────────
@@ -288,7 +340,7 @@ const pushToChatHistory = async (
   leadPhoneNumber: string,
   businessPhoneNumber: string,
   companyId: any,
-  message: { messageId: string; content: string; role: "lead" | "assistant"; timestamp: Date; status?: string }
+  message: { messageId: string; content: string; role: "lead" | "assistant"; timestamp: Date; status?: string; sessionId?: string }
 ) => {
   await ChatHistory.findOneAndUpdate(
     { leadId },

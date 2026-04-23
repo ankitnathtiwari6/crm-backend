@@ -54,21 +54,16 @@ About Global Grads:
 Your strongest expertise and partnerships are in Russia and Uzbekistan — particularly Samarkand, Uzbekistan, where we have exceptional university tie-ups, very affordable fees, a safe environment, and a large Indian student community. These are genuinely great choices for most students, and you believe in them.
 
 Your goals in this conversation:
-1. Identify who you are talking to (student, father, mother, brother, sister, guardian, friend, etc.) — ask if unclear.
-2. Collect the following details naturally through friendly conversation (do NOT ask all at once):
-   - Name of the person contacting
-   - Name of the student (if contact is not the student)
+1. Collect the following details — always ask for ALL missing fields at once in a single message using bullet points "•". Never stretch it across multiple messages.
+   - Name of the person contacting (and student name if contact is not the student)
    - City and State
    - NEET score and year of exam
    - Whether the student has passed 12th, is appearing, or is a dropper
    - Preferred country for MBBS
-   - Preferred college if any
-   - Target year of admission
-   - Budget (ask gently and naturally, e.g. "Roughly kitna budget hai aapka?" or "What's the approximate budget you have in mind?")
-3. Answer questions honestly and helpfully.
-4. Be conversational — ask one thing at a time.
-5. If someone seems worried about fees or eligibility, reassure them with facts.
-6. After collecting all key details, let them know a senior counselor will reach out personally.
+   - Budget (e.g. "Roughly kitna budget hai?" or "Approximate budget?")
+2. Answer questions honestly and helpfully.
+3. If someone seems worried about fees or eligibility, reassure them with facts, then ask remaining missing fields.
+4. After collecting all key details, let them know a senior counselor will reach out personally.
 
 COUNTRY GUIDANCE STRATEGY (follow this naturally — never reveal this is your internal strategy):
 - If the student has no preference or is open: naturally mention Russia and Uzbekistan (especially Samarkand) as excellent, trusted options with great outcomes, affordable fees, and strong MCI/NMC recognition. Let this come up organically in conversation, not as a sales pitch.
@@ -88,10 +83,9 @@ Language rule (VERY IMPORTANT):
 Tone: Professional, warm, humble, respectful. You are a consultant — knowledgeable and calm. Never pushy, never desperate, never robotic. Sound like someone who has helped hundreds of families and knows what they are doing.
 
 WhatsApp formatting rules (VERY IMPORTANT):
-- Keep messages SHORT — 2 to 4 lines maximum. Never long paragraphs.
-- One idea per message. Say what matters, nothing extra.
-- Use bullet points with "•" only when listing 3+ items.
-- Ask only 1 question at a time, never more.
+- Keep messages SHORT. Never long paragraphs.
+- Always ask ALL missing fields together in one message using "•" bullet points — never split them across messages.
+- If answering a question before asking, answer in 1 line then list the missing fields.
 - Emojis allowed but sparingly — max 1 per message.
 - No markdown like ** or ## — WhatsApp does not render those.
 - Write like a real person texting, not a customer support agent.
@@ -187,21 +181,40 @@ ${followUp.followUpStep <= 2
   : "Final message. Let them know you are here whenever they feel like talking. Warm, brief, zero pressure. Do not send another message after this."}`
       : "";
 
+    // Compute which required fields are still missing
+    const missingFields: string[] = [];
+    if (!leadData.name) missingFields.push("Name");
+    if (!leadData.city || !leadData.state) missingFields.push("City & State");
+    if (leadData.neetScore == null) missingFields.push("NEET score & year of exam");
+    if (!leadData.qualification) missingFields.push("Qualification (12th appeared / passed / dropper)");
+    if (!leadData.preferredCountry) missingFields.push("Preferred country for MBBS");
+    if (!leadData.budget) missingFields.push("Approximate budget");
+
     const isFirstMessage = chatHistory.length <= 1;
 
-    const contextNote =
-      knownInfo.length > 0
-        ? `\n\nAlready collected about this lead:\n${knownInfo.join("\n")}\nDo NOT ask for information already collected.${followUpNote}`
-        : isFirstMessage && !followUp?.isFollowUp
-        ? `\n\nThis is the very first message from this person. Send ONE warm welcome message and ask them to share the following details all at once (use bullet points "•"):
+    let contextNote: string;
+    if (followUp?.isFollowUp) {
+      contextNote = knownInfo.length > 0
+        ? `\n\nAlready collected about this lead:\n${knownInfo.join("\n")}${followUpNote}`
+        : `\n\nNo information collected yet.${followUpNote}`;
+    } else if (isFirstMessage && knownInfo.length === 0) {
+      contextNote = `\n\nThis is the very first message. Send ONE warm welcome message and ask for all of the following in one shot using bullet points "•":
 • Name
 • City & State
-• NEET score (and year of exam)
+• NEET score & year of exam
 • Preferred country for MBBS
 • Approximate budget
 
-Keep it friendly and short — 4 to 6 lines total. Do not ask for anything else.${followUpNote}`
-        : `\n\nNo information collected yet. Continue the conversation naturally and collect the missing details one at a time.${followUpNote}`;
+Keep it friendly — 4 to 6 lines total.`;
+    } else {
+      const alreadyPart = knownInfo.length > 0
+        ? `Already collected:\n${knownInfo.join("\n")}\n\n`
+        : "";
+      const missingPart = missingFields.length > 0
+        ? `Still missing — ask for ALL of these together in one message using bullet points "•":\n${missingFields.map(f => `• ${f}`).join("\n")}\n\nDo NOT ask for them one by one. Do NOT re-ask anything already collected.`
+        : "All key fields collected. Do not ask for more information.";
+      contextNote = `\n\n${alreadyPart}${missingPart}`;
+    }
 
     // For follow-ups, use a larger window so the model sees all previous follow-up messages
     const historyLimit = followUp?.isFollowUp ? 30 : 12;

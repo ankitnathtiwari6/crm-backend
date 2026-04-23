@@ -17,7 +17,7 @@ const DELAYS_MS: Record<number, number> = {
   5: 14 * 60 * 60 * 1000,     // 14 hours
 };
 
-const MAX_STEPS = 5;
+const MAX_STEPS = 4;
 const MAX_WINDOW_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 // ─── Quiet hours (11pm–7am IST = 17:30–01:30 UTC) ────────────────────────────
@@ -187,7 +187,7 @@ export const scheduleFollowUp = async (
   if (!delay) return;
 
   // Cancel any existing job for this lead first
-  await agenda.cancel({ name: JOB_NAME, data: { leadId } });
+  await agenda.cancel({ name: JOB_NAME, "data.leadId": leadId });
 
   const runAt = new Date(Date.now() + delay);
   const job = await agenda.schedule(runAt, JOB_NAME, { leadId, step });
@@ -203,7 +203,7 @@ export const scheduleFollowUp = async (
 };
 
 export const cancelFollowUp = async (leadId: string): Promise<void> => {
-  const cancelled = await agenda.cancel({ name: JOB_NAME, data: { leadId } });
+  const cancelled = await agenda.cancel({ name: JOB_NAME, "data.leadId": leadId });
   if ((cancelled ?? 0) > 0) {
     console.log(`[FollowUp] Cancelled pending job for ${leadId}`);
   }
@@ -214,4 +214,42 @@ const clearFollowUp = async (leadId: string): Promise<void> => {
   await Lead.findByIdAndUpdate(leadId, {
     $unset: { followUpStep: "", followUpJobId: "", followUpStartedAt: "" },
   });
+};
+
+// ─── Startup cleanup ──────────────────────────────────────────────────────────
+// Removes duplicate / orphaned follow-up jobs left over from the previous bug
+// where agenda.cancel() never matched.  Keeps the soonest-scheduled job per
+// lead and removes all extras.
+export const purgeOrphanedFollowUpJobs = async (): Promise<void> => {
+  const jobs = await agenda.jobs({ name: JOB_NAME });
+
+  // Group all pending jobs by leadId
+  const byLead = new Map<string, any[]>();
+  for (const job of jobs) {
+    const leadId = job.attrs.data?.leadId;
+    if (!leadId) continue;
+    if (!byLead.has(leadId)) byLead.set(leadId, []);
+    byLead.get(leadId)!.push(job);
+  }
+
+  let removed = 0;
+  for (const leadJobs of byLead.values()) {
+    if (leadJobs.length <= 1) continue;
+    // Keep the job scheduled to run soonest; remove the rest
+    leadJobs.sort(
+      (a, b) =>
+        new Date(a.attrs.nextRunAt).getTime() -
+        new Date(b.attrs.nextRunAt).getTime()
+    );
+    for (const job of leadJobs.slice(1)) {
+      await job.remove();
+      removed++;
+    }
+  }
+
+  if (removed > 0) {
+    console.log(`[FollowUp] Purged ${removed} orphaned duplicate job(s) on startup`);
+  } else {
+    console.log("[FollowUp] No orphaned jobs found");
+  }
 };

@@ -187,10 +187,21 @@ ${followUp.followUpStep <= 2
   : "Final message. Let them know you are here whenever they feel like talking. Warm, brief, zero pressure. Do not send another message after this."}`
       : "";
 
+    const isFirstMessage = chatHistory.length <= 1;
+
     const contextNote =
       knownInfo.length > 0
         ? `\n\nAlready collected about this lead:\n${knownInfo.join("\n")}\nDo NOT ask for information already collected.${followUpNote}`
-        : `\n\nNo information collected yet. Start by greeting warmly and finding out who you are talking to.${followUpNote}`;
+        : isFirstMessage && !followUp?.isFollowUp
+        ? `\n\nThis is the very first message from this person. Send ONE warm welcome message and ask them to share the following details all at once (use bullet points "•"):
+• Name
+• City & State
+• NEET score (and year of exam)
+• Preferred country for MBBS
+• Approximate budget
+
+Keep it friendly and short — 4 to 6 lines total. Do not ask for anything else.${followUpNote}`
+        : `\n\nNo information collected yet. Continue the conversation naturally and collect the missing details one at a time.${followUpNote}`;
 
     // For follow-ups, use a larger window so the model sees all previous follow-up messages
     const historyLimit = followUp?.isFollowUp ? 30 : 12;

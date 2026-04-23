@@ -11,7 +11,7 @@ import leadRoutes from "./routes/leadRoutes";
 import authRoutes from "./routes/authRoutes";
 import companyRoutes from "./routes/companyRoutes";
 import agenda from "./jobs/agenda";
-import { defineFollowUpJob } from "./jobs/followUpJob";
+import { defineFollowUpJob, purgeOrphanedFollowUpJobs } from "./jobs/followUpJob";
 // Load environment variables
 dotenv.config();
 
@@ -41,7 +41,10 @@ app.use("/api/companies", companyRoutes);
 
 // Start Agenda job scheduler
 defineFollowUpJob();
-agenda.start().then(() => console.log("Agenda scheduler started"));
+agenda.start().then(async () => {
+  console.log("Agenda scheduler started");
+  await purgeOrphanedFollowUpJobs();
+});
 
 // Basic route
 app.get("/", (req, res) => {

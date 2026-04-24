@@ -148,6 +148,7 @@ export const getLeads = asyncHandler(async (req: Request, res: Response) => {
       lastInteraction: lead.lastInteraction,
       messageCount: lead.messageCount,
       status: lead.status,
+      stage: (lead as any).stage || null,
       tags: lead.tags || [],
       source: lead.source || "WhatsApp",
       notes: lead.notes || null,
@@ -205,16 +206,18 @@ export const getLeadById = asyncHandler(async (req: Request, res: Response) => {
       });
     }
 
-    // Prefer ChatHistory collection; fall back to embedded chatHistory for old leads
-    const chatDoc = await ChatHistory.findOne({ leadId: lead._id });
-    const chatHistory = chatDoc
-      ? chatDoc.messages
-      : lead.chatHistory;
+    // Prefer ChatHistory collection by leadId, then by phone number, then fall back to embedded
+    let chatDoc = await ChatHistory.findOne({ leadId: lead._id });
+    if (!chatDoc && lead.leadPhoneNumber) {
+      chatDoc = await ChatHistory.findOne({ leadPhoneNumber: lead.leadPhoneNumber });
+    }
+    const chatHistory = chatDoc ? chatDoc.messages : lead.chatHistory;
 
     res.status(200).json({
       success: true,
       lead: {
         ...lead.toObject(),
+        id: lead._id,
         chatHistory,
       },
     });
@@ -228,6 +231,90 @@ export const getLeadById = asyncHandler(async (req: Request, res: Response) => {
   }
 });
 
+// Helper: generate activity log entries by comparing old and new lead data
+const generateActivityLogs = (
+  oldLead: any,
+  newData: any,
+  author: { id: string; name: string }
+) => {
+  const logs: any[] = [];
+  const now = new Date();
+
+  const track = (field: string, label: string) => {
+    const oldVal = oldLead[field] != null ? String(oldLead[field]) : "";
+    const newVal = newData[field] != null ? String(newData[field]) : "";
+    if (field in newData && oldVal !== newVal) {
+      logs.push({
+        action: newVal
+          ? `${label} changed${oldVal ? ` from "${oldVal}"` : ""} to "${newVal}"`
+          : `${label} cleared`,
+        field,
+        oldValue: oldVal || undefined,
+        newValue: newVal || undefined,
+        author,
+        createdAt: now,
+      });
+    }
+  };
+
+  track("name", "Name");
+  track("email", "Email");
+  track("neetScore", "NEET Score");
+  track("preferredCountry", "Preferred Country");
+  track("city", "City");
+  track("state", "State");
+  track("status", "Status");
+  track("stage", "Stage");
+  track("qualification", "Qualification");
+  track("neetYear", "NEET Year");
+  track("targetYear", "Target Year");
+  track("budget", "Budget");
+  track("notes", "Notes");
+
+  // Tags: compute added/removed
+  if ("tags" in newData) {
+    const oldTags: string[] = oldLead.tags || [];
+    const newTags: string[] = newData.tags || [];
+    const added = newTags.filter((t: string) => !oldTags.includes(t));
+    const removed = oldTags.filter((t: string) => !newTags.includes(t));
+    if (added.length || removed.length) {
+      const parts: string[] = [];
+      if (added.length) parts.push(`added: ${added.join(", ")}`);
+      if (removed.length) parts.push(`removed: ${removed.join(", ")}`);
+      logs.push({ action: `Tags updated (${parts.join(" · ")})`, field: "tags", author, createdAt: now });
+    }
+  }
+
+  // AssignedTo
+  if ("assignedTo" in newData) {
+    const oldId = oldLead.assignedTo?.id;
+    const newAssignee = newData.assignedTo;
+    const newId = newAssignee?.id;
+    if (oldId !== newId) {
+      if (newId) {
+        logs.push({
+          action: `Assigned to ${newAssignee.name}`,
+          field: "assignedTo",
+          oldValue: oldLead.assignedTo?.name,
+          newValue: newAssignee.name,
+          author,
+          createdAt: now,
+        });
+      } else {
+        logs.push({
+          action: `Unassigned${oldLead.assignedTo?.name ? ` (was ${oldLead.assignedTo.name})` : ""}`,
+          field: "assignedTo",
+          oldValue: oldLead.assignedTo?.name,
+          author,
+          createdAt: now,
+        });
+      }
+    }
+  }
+
+  return logs;
+};
+
 /**
  * Update lead details
  * @route PUT /api/leads/:id
@@ -238,72 +325,127 @@ export const updateLead = asyncHandler(async (req: Request, res: Response) => {
     const lead = await Lead.findById(req.params.id);
 
     if (!lead) {
-      return res.status(404).json({
-        success: false,
-        message: "Lead not found",
-      });
+      return res.status(404).json({ success: false, message: "Lead not found" });
     }
 
     const updateData = { ...req.body };
 
-    // Handle 'N/A' for neetScore - convert to null or remove the field
-    if (updateData.neetScore === "N/A") {
-      updateData.neetScore = null;
-    }
+    // Strip fields that should never be overwritten via this endpoint
+    delete updateData.remarks;
+    delete updateData.activityLog;
+    delete updateData.chatHistory;
 
-    // Handle assignedTo
+    if (updateData.neetScore === "N/A") updateData.neetScore = null;
+
+    // Resolve assignedTo to { id, name }
     if (updateData.assignedTo) {
-      // If assignedTo is a string (just an ID)
       if (typeof updateData.assignedTo === "string") {
-        const user = await User.findById(updateData.assignedTo);
-        if (user) {
-          updateData.assignedTo = {
-            id: user._id.toString(),
-            name: user.name,
-          };
-        } else {
-          // If user not found, remove the assignedTo field
-          delete updateData.assignedTo;
-        }
+        const u = await User.findById(updateData.assignedTo);
+        updateData.assignedTo = u ? { id: u._id.toString(), name: u.name } : undefined;
+      } else if (typeof updateData.assignedTo === "object" && "id" in updateData.assignedTo && !updateData.assignedTo.name) {
+        const u = await User.findById(updateData.assignedTo.id);
+        updateData.assignedTo = u ? { id: u._id.toString(), name: u.name } : undefined;
       }
-      // If assignedTo is an object with just an id property
-      else if (
-        typeof updateData.assignedTo === "object" &&
-        "id" in updateData.assignedTo &&
-        !updateData.assignedTo.name
-      ) {
-        const user = await User.findById(updateData.assignedTo.id);
-        if (user) {
-          updateData.assignedTo = {
-            id: user._id.toString(),
-            name: user.name,
-          };
-        } else {
-          // If user not found, remove the assignedTo field
-          delete updateData.assignedTo;
-        }
-      }
-      // If it's already a complete object with id and name, keep it as is
     }
 
-    // Update only the fields that are provided
-    const updatedLead = await Lead.findByIdAndUpdate(
-      req.params.id,
-      { $set: updateData },
-      { new: true, runValidators: true }
-    );
+    // Get current user for activity log authorship
+    const requestUser = await User.findById((req as any).user?.id);
+    const author = requestUser
+      ? { id: requestUser._id.toString(), name: requestUser.name }
+      : { id: "system", name: "System" };
+
+    // Generate activity log entries for changed fields
+    const newLogs = generateActivityLogs(lead.toObject(), updateData, author);
+
+    // Apply updates to the lead document
+    Object.assign(lead, updateData);
+    if (newLogs.length) {
+      (lead.activityLog as any[]).push(...newLogs);
+    }
+
+    const savedLead = await lead.save();
 
     res.status(200).json({
       success: true,
-      lead: updatedLead,
+      lead: {
+        id: savedLead._id,
+        leadPhoneNumber: savedLead.leadPhoneNumber,
+        businessPhoneNumber: savedLead.businessPhoneNumber,
+        businessPhoneId: savedLead.businessPhoneId,
+        name: savedLead.name || "Unknown",
+        email: savedLead.email || null,
+        preferredCountry: savedLead.preferredCountry || null,
+        city: savedLead.city || null,
+        state: savedLead.state || null,
+        neetScore: savedLead.neetScore,
+        qualification: (savedLead as any).qualification || null,
+        neetYear: (savedLead as any).neetYear || null,
+        targetYear: (savedLead as any).targetYear || null,
+        budget: (savedLead as any).budget || null,
+        assignedTo: savedLead.assignedTo || null,
+        numberOfEnquiry: savedLead.numberOfEnquiry,
+        numberOfChatsMessages: savedLead.numberOfChatsMessages,
+        firstInteraction: savedLead.firstInteraction,
+        lastInteraction: savedLead.lastInteraction,
+        messageCount: savedLead.messageCount,
+        status: savedLead.status,
+        stage: (savedLead as any).stage || null,
+        tags: savedLead.tags || [],
+        source: savedLead.source || "WhatsApp",
+        notes: savedLead.notes || null,
+        sessions: savedLead.sessions || [],
+        leadQualityScore: savedLead.leadQualityScore ?? null,
+        leadQualityScoreReason: savedLead.leadQualityScoreReason ?? null,
+        leadQualityScoreUpdatedAt: savedLead.leadQualityScoreUpdatedAt ?? null,
+        remarks: (savedLead as any).remarks || [],
+        activityLog: (savedLead as any).activityLog || [],
+        createdAt: savedLead.createdAt,
+        updatedAt: savedLead.updatedAt,
+      },
     });
   } catch (error) {
     console.error("Error updating lead:", error);
-    res.status(500).json({
-      success: false,
-      message: "Error updating lead",
-      error: (error as Error).message,
-    });
+    res.status(500).json({ success: false, message: "Error updating lead", error: (error as Error).message });
+  }
+});
+
+/**
+ * Add a remark to a lead
+ * @route POST /api/leads/:id/remarks
+ * @access Private
+ */
+export const addRemark = asyncHandler(async (req: Request, res: Response) => {
+  try {
+    const { text } = req.body;
+    if (!text?.trim()) {
+      return res.status(400).json({ success: false, message: "Remark text is required" });
+    }
+
+    const lead = await Lead.findById(req.params.id);
+    if (!lead) {
+      return res.status(404).json({ success: false, message: "Lead not found" });
+    }
+
+    const requestUser = await User.findById((req as any).user?.id);
+    if (!requestUser) {
+      return res.status(404).json({ success: false, message: "User not found" });
+    }
+
+    const remark = {
+      text: text.trim(),
+      author: { id: requestUser._id.toString(), name: requestUser.name },
+      createdAt: new Date(),
+    };
+
+    (lead.remarks as any[]).push(remark);
+    await lead.save();
+
+    // Return the remark with its generated _id
+    const saved = (lead.remarks as any[])[(lead.remarks as any[]).length - 1];
+    res.status(201).json({ success: true, remark: saved });
+  } catch (error) {
+    console.error("Error adding remark:", error);
+    res.status(500).json({ success: false, message: "Error adding remark", error: (error as Error).message });
   }
 });
 

@@ -29,11 +29,10 @@ export const getLeads = asyncHandler(async (req: Request, res: Response) => {
       }
     }
 
-    if (req.query.minScore && req.query.maxScore) {
-      filter.neetScore = {
-        $gte: parseInt(req.query.minScore as string),
-        $lte: parseInt(req.query.maxScore as string),
-      };
+    if (req.query.minScore || req.query.maxScore) {
+      filter.neetScore = { $exists: true, $ne: null };
+      if (req.query.minScore) filter.neetScore.$gte = parseInt(req.query.minScore as string);
+      if (req.query.maxScore) filter.neetScore.$lte = parseInt(req.query.maxScore as string);
     }
 
     // Country filtering
@@ -61,16 +60,12 @@ export const getLeads = asyncHandler(async (req: Request, res: Response) => {
       filter["assignedTo"] = { $exists: false };
     }
 
-    // Tags filtering
+    // Tags filtering — always use $all so multiple selections are AND (lead must have every selected tag)
     const tags = req.query.tags;
     if (tags) {
-      // If tags is an array (multiple tags selected)
-      if (Array.isArray(tags) && tags.length > 0) {
-        filter.tags = { $all: tags }; // Match leads that have ALL the specified tags
-      }
-      // If tags is a single string
-      else if (typeof tags === "string") {
-        filter.tags = tags;
+      const tagArray = Array.isArray(tags) ? tags : [tags];
+      if (tagArray.length > 0) {
+        filter.tags = { $all: tagArray };
       }
     }
 
@@ -124,8 +119,13 @@ export const getLeads = asyncHandler(async (req: Request, res: Response) => {
     console.log("Today's leads count calculated:", todayLeadsCount);
 
     // Fetch leads with pagination and sorting
+    const sortField = (req.query.sortBy as string) || "lastInteraction";
+    const sortOrder = req.query.sortOrder === "asc" ? 1 : -1;
+    const allowedSortFields = ["lastInteraction", "createdAt", "leadQualityScore"];
+    const resolvedSort = allowedSortFields.includes(sortField) ? sortField : "lastInteraction";
+
     const leads = await Lead.find(filter)
-      .sort({ lastInteraction: -1 }) // Sort by most recent interaction
+      .sort({ [resolvedSort]: sortOrder })
       .skip(skip)
       .limit(limit);
 

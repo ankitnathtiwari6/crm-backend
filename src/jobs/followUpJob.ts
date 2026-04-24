@@ -10,15 +10,13 @@ export const JOB_NAME = "send-followup";
 // ─── Sequence delays ──────────────────────────────────────────────────────────
 
 const DELAYS_MS: Record<number, number> = {
-  1: 2 * 60 * 1000,           // 2 min
-  2: 4 * 60 * 1000,           // 4 min
-  3: 10 * 60 * 1000,          // 10 min
-  4: 6 * 60 * 60 * 1000,      // 6 hours
-  5: 14 * 60 * 60 * 1000,     // 14 hours
+  1: 20 * 60 * 1000,           // 20 min
+  2: 6 * 60 * 60 * 1000,       // 6 hours
+  3: 20 * 60 * 60 * 1000,      // 20 hours
 };
 
-const MAX_STEPS = 4;
-const MAX_WINDOW_MS = 24 * 60 * 60 * 1000; // 24 hours
+const MAX_STEPS = 3;
+const MAX_WINDOW_MS = 48 * 60 * 60 * 1000; // 48 hours
 
 // ─── Quiet hours (11pm–7am IST = 17:30–01:30 UTC) ────────────────────────────
 

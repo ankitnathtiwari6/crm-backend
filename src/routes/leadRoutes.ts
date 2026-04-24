@@ -4,6 +4,7 @@ import {
   getLeads,
   getLeadById,
   updateLead,
+  deleteLead,
   createLead,
   addRemark,
 } from "../controllers/leadController";
@@ -16,6 +17,7 @@ router.get("/", protect, getLeads);
 router.get("/:id", protect, getLeadById);
 
 router.put("/:id", protect, updateLead);
+router.delete("/:id", protect, deleteLead);
 
 router.post("/:id/remarks", protect, addRemark);
 

@@ -178,7 +178,7 @@ export const runCounselorAgent = async (
     if (leadData.budget) knownInfo.push(`Budget: ${leadData.budget}`);
 
     const followUpNote = followUp?.isFollowUp
-      ? `\n\nCONTEXT: The person has not replied yet. This is message ${followUp.followUpStep} of 5 that you are sending unprompted.
+      ? `\n\nCONTEXT: The person has not replied yet. This is message ${followUp.followUpStep} of 3 that you are sending unprompted.
 
 You are Anushka — a real person, not a bot. Write exactly how you would text someone on WhatsApp if you genuinely wanted to help them but didn't want to bother them.
 
@@ -191,13 +191,11 @@ Rules:
 - No bullet points. No lists. Plain text only.
 - Be warm, humble, never pushy. If they don't reply, that is okay.
 
-${followUp.followUpStep <= 2
+${followUp.followUpStep === 1
   ? "Share one small helpful thought or fact related to MBBS abroad — something genuinely useful that a friend who knows this field would casually mention. Not a sales pitch."
-  : followUp.followUpStep === 3
-  ? "Say something light and human — maybe a reassuring thought, or something that shows you understand their situation. Still no questions, no data collection."
-  : followUp.followUpStep === 4
-  ? "Very gently let them know admissions are moving and you are happy to have a quick call if they ever want. Keep it soft — one line offer, no pressure."
-  : "Final message. Let them know you are here whenever they feel like talking. Warm, brief, zero pressure. Do not send another message after this."}`
+  : followUp.followUpStep === 2
+  ? "Say something light and human — a reassuring thought or something that shows you understand their situation. No questions, no data collection."
+  : "Final message. Very gently let them know you are happy to have a quick call whenever they are ready. Warm, one line, zero pressure. Do not send another message after this."}`
       : "";
 
     // Compute which required fields are still missing

@@ -3,6 +3,7 @@ import Lead from "../models/Lead";
 import ChatHistory from "../models/ChatHistory";
 import asyncHandler from "../utils/asyncHandler";
 import User from "../models/User";
+import { cancelFollowUp } from "../jobs/followUpJob";
 
 export const getLeads = asyncHandler(async (req: Request, res: Response) => {
   try {
@@ -469,6 +470,34 @@ export const getUsers = asyncHandler(async (req: Request, res: Response) => {
       message: "Error fetching users",
       error: (error as Error).message,
     });
+  }
+});
+
+/**
+ * Delete a lead and all associated data
+ * @route DELETE /api/leads/:id
+ * @access Private — admin only (enforced in route middleware)
+ */
+export const deleteLead = asyncHandler(async (req: Request, res: Response) => {
+  try {
+    const lead = await Lead.findById(req.params.id);
+    if (!lead) {
+      return res.status(404).json({ success: false, message: "Lead not found" });
+    }
+
+    // Cancel any scheduled follow-up jobs
+    await cancelFollowUp((lead._id as any).toString());
+
+    // Delete associated chat history
+    await ChatHistory.deleteMany({ leadId: lead._id });
+
+    // Delete the lead itself
+    await Lead.findByIdAndDelete(lead._id);
+
+    res.status(200).json({ success: true, message: "Lead deleted" });
+  } catch (error) {
+    console.error("Error deleting lead:", error);
+    res.status(500).json({ success: false, message: "Error deleting lead", error: (error as Error).message });
   }
 });
 

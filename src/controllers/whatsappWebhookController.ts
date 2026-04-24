@@ -200,6 +200,8 @@ const handleIncomingMessages = async (body: any) => {
             targetYear: lead.targetYear,
             budget: (lead as any).budget,
             email: lead.email,
+            totalMessages: lead.messageCount,
+            sessionCount: lead.sessions?.length,
           };
 
           // 7. Run the counselor agent

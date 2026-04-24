@@ -31,6 +31,9 @@ export interface LeadContext {
   targetYear?: number;
   budget?: string;
   email?: string;
+  // Engagement metadata for accurate scoring across all sessions
+  totalMessages?: number;
+  sessionCount?: number;
 }
 
 export interface AgentResult {
@@ -115,6 +118,8 @@ Rate this lead from 0 to 100 based on engagement + information provided:
 - 40–59 (Neutral): Partial engagement, mixed signals, gave little info
 - 20–39 (Cold): Minimal replies, very little info, low engagement
 - 0–19 (Junk): No meaningful engagement, spam, wrong number, or completely unresponsive
+
+RETURNING LEAD RULE (VERY IMPORTANT): If the "Already collected" context shows that ALL key fields (name, city, state, neetScore, neetYear, qualification, preferredCountry, budget) are already present, this is a returning lead who previously completed the intake. Their baseline score must be at least 75, regardless of how short the current re-engagement message is. A lead who already gave full details and is reaching out again is demonstrably warm-to-hot. Adjust up from 75 based on how engaged they seem in the new session.
 
 IMPORTANT OUTPUT FORMAT:
 You must always respond with a valid JSON object — no markdown, no code fences, raw JSON only:
@@ -203,12 +208,18 @@ ${followUp.followUpStep <= 2
     if (!leadData.budget) missingFields.push("Approximate budget");
 
     const isFirstMessage = chatHistory.length <= 1;
+    const isReturningLead = (leadData.sessionCount ?? 1) > 1;
+
+    // Engagement summary always included so model scores based on full history
+    const engagementSummary = (leadData.totalMessages != null || leadData.sessionCount != null)
+      ? `\nEngagement across ALL sessions: ${leadData.totalMessages ?? "?"} total messages, ${leadData.sessionCount ?? 1} session(s).${isReturningLead ? " This lead has returned for a new session — re-engagement signals high conversion intent." : ""}`
+      : "";
 
     let contextNote: string;
     if (followUp?.isFollowUp) {
       contextNote = knownInfo.length > 0
-        ? `\n\nAlready collected about this lead:\n${knownInfo.join("\n")}${followUpNote}`
-        : `\n\nNo information collected yet.${followUpNote}`;
+        ? `\n\nAlready collected about this lead:\n${knownInfo.join("\n")}${engagementSummary}${followUpNote}`
+        : `\n\nNo information collected yet.${engagementSummary}${followUpNote}`;
     } else if (isFirstMessage && knownInfo.length === 0) {
       contextNote = `\n\nThis is the very first message. Send ONE warm welcome message and ask for all of the following in one shot using bullet points "•":
 • Name
@@ -224,8 +235,8 @@ Keep it friendly — 4 to 6 lines total.`;
         : "";
       const missingPart = missingFields.length > 0
         ? `Still missing — ask for ALL of these together in one message using bullet points "•":\n${missingFields.map(f => `• ${f}`).join("\n")}\n\nDo NOT ask for them one by one. Do NOT re-ask anything already collected.`
-        : "All key fields collected. Do not ask for more information.";
-      contextNote = `\n\n${alreadyPart}${missingPart}`;
+        : `All key fields collected. Do not ask for more information.${isReturningLead ? " This is a RETURNING LEAD who re-engaged — high conversion signal. Lead quality score must be at least 80." : " This lead has completed intake — score must be at least 75."}`;
+      contextNote = `\n\n${alreadyPart}${missingPart}${engagementSummary}`;
     }
 
     // For follow-ups, use a larger window so the model sees all previous follow-up messages

@@ -8,12 +8,23 @@ import ChatHistory from "../models/ChatHistory";
 import Lead from "../models/Lead";
 import Company from "../models/Company";
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
-const pinecone = new Pinecone({ apiKey: process.env.PINECONE_API_KEY! });
 const PINECONE_INDEX = "chat-history";
 
+let _openai: OpenAI | null = null;
+let _pinecone: Pinecone | null = null;
+
+function getOpenAI(): OpenAI {
+  if (!_openai) _openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
+  return _openai;
+}
+
+function getPinecone(): Pinecone {
+  if (!_pinecone) _pinecone = new Pinecone({ apiKey: process.env.PINECONE_API_KEY! });
+  return _pinecone;
+}
+
 async function createEmbedding(text: string): Promise<number[]> {
-  const response = await openai.embeddings.create({
+  const response = await getOpenAI().embeddings.create({
     model: "text-embedding-3-small",
     input: text.slice(0, 8000),
   });
@@ -143,7 +154,7 @@ export const deleteSuggestion = asyncHandler(
 
     if (suggestion.isEmbedded && suggestion.pineconeId) {
       try {
-        const index = pinecone.index(PINECONE_INDEX);
+        const index = getPinecone().index(PINECONE_INDEX);
         await index.deleteOne({ id: suggestion.pineconeId });
       } catch (_err) {
         // non-fatal
@@ -165,7 +176,7 @@ export const embedSuggestions = asyncHandler(
 
     const suggestions = await TrainingSuggestion.find(query);
 
-    const index = pinecone.index(PINECONE_INDEX);
+    const index = getPinecone().index(PINECONE_INDEX);
     let embedded = 0;
     const errors: string[] = [];
 
@@ -219,7 +230,7 @@ export const searchSimilar = asyncHandler(
     if (!q) return res.status(400).json({ message: "Query (q) is required" });
 
     const embedding = await createEmbedding(q);
-    const index = pinecone.index(PINECONE_INDEX);
+    const index = getPinecone().index(PINECONE_INDEX);
 
     const results = await index.query({
       vector: embedding,

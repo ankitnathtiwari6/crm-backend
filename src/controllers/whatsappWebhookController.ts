@@ -99,6 +99,18 @@ export const processWebhook = asyncHandler(
   }
 );
 
+// ─── Quality tag helpers ──────────────────────────────────────────────────────
+
+const QUALITY_TAGS = new Set(["hot", "warm", "neutral", "cold", "junk"]);
+
+const getQualityTag = (score: number): string => {
+  if (score >= 80) return "hot";
+  if (score >= 60) return "warm";
+  if (score >= 40) return "neutral";
+  if (score >= 20) return "cold";
+  return "junk";
+};
+
 // ─── Core message handler ─────────────────────────────────────────────────────
 
 const handleIncomingMessages = async (body: any) => {
@@ -252,6 +264,9 @@ const handleIncomingMessages = async (body: any) => {
             updateFields.leadQualityScore = leadQualityScore;
             updateFields.leadQualityScoreReason = leadQualityScoreReason ?? "";
             updateFields.leadQualityScoreUpdatedAt = new Date();
+            // Sync the quality tag — replace any existing quality tag, keep other tags
+            const otherTags = (lead.tags ?? []).filter((t) => !QUALITY_TAGS.has(t));
+            updateFields.tags = [...otherTags, getQualityTag(leadQualityScore)];
           }
 
           const sessionUpdate: any = {
@@ -328,6 +343,7 @@ const upsertLead = async (
       numberOfChatsMessages: 0,
       numberOfEnquiry: 1,
       status: "active",
+      tags: ["cold"],
     });
     console.log(`[${leadPhoneNumber}] New lead created`);
   }

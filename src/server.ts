@@ -10,6 +10,7 @@ import whatsappWebhookRoutes from "./routes/whatsappWebhookRoutes";
 import leadRoutes from "./routes/leadRoutes";
 import authRoutes from "./routes/authRoutes";
 import companyRoutes from "./routes/companyRoutes";
+import trainingRoutes from "./routes/trainingRoutes";
 import agenda from "./jobs/agenda";
 import { defineFollowUpJob, purgeOrphanedFollowUpJobs } from "./jobs/followUpJob";
 // Load environment variables
@@ -38,6 +39,7 @@ app.use("/api/webhook", whatsappWebhookRoutes);
 app.use("/api/leads", leadRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/companies", companyRoutes);
+app.use("/api/training", trainingRoutes);
 
 // Start Agenda job scheduler
 defineFollowUpJob();

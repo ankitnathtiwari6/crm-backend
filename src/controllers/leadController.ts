@@ -78,7 +78,7 @@ export const getLeads = asyncHandler(async (req: Request, res: Response) => {
       ];
     }
 
-    // Date range filtering
+    // Created-at date range filtering
     if (req.query.startDate || req.query.endDate) {
       filter.createdAt = {};
 
@@ -87,10 +87,24 @@ export const getLeads = asyncHandler(async (req: Request, res: Response) => {
       }
 
       if (req.query.endDate) {
-        // Add one day to include the end date fully
         const endDate = new Date(req.query.endDate as string);
         endDate.setDate(endDate.getDate() + 1);
         filter.createdAt.$lte = endDate;
+      }
+    }
+
+    // Active date (lastInteraction) range filtering
+    if (req.query.activeStartDate || req.query.activeEndDate) {
+      filter.lastInteraction = {};
+
+      if (req.query.activeStartDate) {
+        filter.lastInteraction.$gte = new Date(req.query.activeStartDate as string);
+      }
+
+      if (req.query.activeEndDate) {
+        const endDate = new Date(req.query.activeEndDate as string);
+        endDate.setDate(endDate.getDate() + 1);
+        filter.lastInteraction.$lte = endDate;
       }
     }
 

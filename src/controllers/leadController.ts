@@ -560,9 +560,50 @@ export const deleteLead = asyncHandler(async (req: Request, res: Response) => {
  * @route GET /api/leads/funnel-stats
  * @access Private
  */
-export const getFunnelStats = asyncHandler(async (_req: Request, res: Response) => {
+export const getFunnelStats = asyncHandler(async (req: Request, res: Response) => {
   try {
+    const match: any = {};
+
+    if (req.query.startDate || req.query.endDate) {
+      match.createdAt = {};
+      if (req.query.startDate) match.createdAt.$gte = new Date(req.query.startDate as string);
+      if (req.query.endDate) {
+        const d = new Date(req.query.endDate as string);
+        d.setDate(d.getDate() + 1);
+        match.createdAt.$lte = d;
+      }
+    }
+
+    if (req.query.activeStartDate || req.query.activeEndDate) {
+      match.lastInteraction = {};
+      if (req.query.activeStartDate) match.lastInteraction.$gte = new Date(req.query.activeStartDate as string);
+      if (req.query.activeEndDate) {
+        const d = new Date(req.query.activeEndDate as string);
+        d.setDate(d.getDate() + 1);
+        match.lastInteraction.$lte = d;
+      }
+    }
+
+    if (req.query.assignedTo) match["assignedTo.id"] = req.query.assignedTo as string;
+    if (req.query.unassigned === "true") match["assignedTo"] = { $exists: false };
+
+    const tags = req.query.tags;
+    if (tags) {
+      const tagArray = Array.isArray(tags) ? tags : [tags];
+      if (tagArray.length > 0) match.tags = { $all: tagArray };
+    }
+
+    if (req.query.country) match.preferredCountry = new RegExp(req.query.country as string, "i");
+    if (req.query.location) {
+      const r = new RegExp(req.query.location as string, "i");
+      match.$or = [{ city: r }, { state: r }];
+    }
+
+    const pipeline: any[] = [];
+    if (Object.keys(match).length > 0) pipeline.push({ $match: match });
+
     const [result] = await Lead.aggregate([
+      ...pipeline,
       {
         $facet: {
           total:            [{ $count: "count" }],

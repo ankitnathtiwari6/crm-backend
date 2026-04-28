@@ -297,7 +297,7 @@ ${followUp.followUpStep === 1
         { role: "system", content: SYSTEM_PROMPT + contextNote },
         ...messages,
       ],
-      max_completion_tokens: 200,
+      max_completion_tokens: 2000,
       temperature: followUp?.isFollowUp ? 0.9 : 0.7,
       response_format: { type: "json_object" },
     });
@@ -320,8 +320,12 @@ ${followUp.followUpStep === 1
       try {
         return parseResult(JSON.parse(cleaned));
       } catch {
-        console.error("Could not parse agent JSON, using raw text:", raw);
-        return { agentMessage: raw, extractedData: {}, conversationComplete: false };
+        console.error("Could not parse agent JSON:", raw);
+        const match = raw.match(/"agentMessage"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+        const fallbackMessage = match
+          ? match[1].replace(/\\n/g, "\n")
+          : "I'm here to help! Could you share a bit more about yourself?";
+        return { agentMessage: fallbackMessage, extractedData: {}, conversationComplete: false };
       }
     }
   } catch (error) {

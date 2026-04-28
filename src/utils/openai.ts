@@ -162,7 +162,9 @@ Rate this lead from 0 to 100 based on engagement + information provided:
 - 60–79 (Warm): Reasonably engaged, gave some details, seems genuinely interested
 - 40–59 (Neutral): Partial engagement, mixed signals, gave little info
 - 20–39 (Cold): Minimal replies, very little info, low engagement
-- 0–19 (Junk): No meaningful engagement, spam, wrong number, or completely unresponsive
+- 0–19 (Not Responding): Spam, wrong number, completely nonsensical messages, or zero genuine engagement
+
+SCORE FLOOR RULE (VERY IMPORTANT): The 0–19 (Junk) range is STRICTLY reserved for spam, wrong number, completely nonsensical messages, or zero replies after the first outreach. Any lead who is genuinely asking about MBBS abroad — even if they have shared no details yet — must score at least 20. If the lead has sent 3 or more messages in this conversation, they must score at least 30. Do NOT mark a lead as junk just because they haven't provided their details yet — early-stage genuine leads are Cold (20–39), not Junk.
 
 RETURNING LEAD RULE (VERY IMPORTANT): If the "Already collected" context shows that ALL key fields (name, city, state, neetScore, neetYear, qualification, preferredCountry, budget) are already present, this is a returning lead who previously completed the intake. Their baseline score must be at least 75, regardless of how short the current re-engagement message is. A lead who already gave full details and is reaching out again is demonstrably warm-to-hot. Adjust up from 75 based on how engaged they seem in the new session.
 

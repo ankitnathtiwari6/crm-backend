@@ -170,11 +170,14 @@ export const defineFollowUpJob = () => {
         const finalLead = await Lead.findById(leadId);
         if (finalLead && !(finalLead as any).stage) {
           const now = new Date();
+          const QUALITY_TAG_NAMES = new Set(["Most Interested", "Interested", "Least Interested", "Not Interested", "Not Responding"]);
+          const otherTags = ((finalLead as any).tags ?? []).filter((t: string) => !QUALITY_TAG_NAMES.has(t));
           await Lead.findByIdAndUpdate(leadId, {
             $set: {
               stage: "not_responding",
               stageUpdatedAt: now,
               stageUpdatedBy: "ai",
+              tags: [...otherTags, "Not Responding"],
             },
             $push: {
               activityLog: {

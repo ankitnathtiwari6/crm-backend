@@ -102,14 +102,15 @@ export const processWebhook = asyncHandler(
 
 // ─── Quality tag helpers ──────────────────────────────────────────────────────
 
-const QUALITY_TAGS = new Set(["Most Interested", "Interested", "Least Interested", "Not Interested", "Junk"]);
+// "Junk" is intentionally excluded — it is assigned manually or by a time-based job (90+ days inactive), never by AI scoring
+const QUALITY_TAGS = new Set(["Most Interested", "Interested", "Least Interested", "Not Interested", "Not Responding"]);
 
 const getQualityTag = (score: number): string => {
   if (score >= 80) return "Most Interested";
   if (score >= 60) return "Interested";
   if (score >= 40) return "Least Interested";
   if (score >= 20) return "Not Interested";
-  return "Junk";
+  return "Not Responding";
 };
 
 // ─── Core message handler ─────────────────────────────────────────────────────

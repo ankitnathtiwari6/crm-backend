@@ -5,6 +5,7 @@ import Company from "../models/Company";
 import ChatHistory from "../models/ChatHistory";
 import { runCounselorAgent, LeadContext } from "../utils/openai";
 import { scheduleFollowUp, cancelFollowUp } from "../jobs/followUpJob";
+import { evaluateLeadStage } from "../utils/aiStageEvaluator";
 import axios from "axios";
 
 // ─── WhatsApp API helpers ─────────────────────────────────────────────────────
@@ -101,14 +102,14 @@ export const processWebhook = asyncHandler(
 
 // ─── Quality tag helpers ──────────────────────────────────────────────────────
 
-const QUALITY_TAGS = new Set(["hot", "warm", "neutral", "cold", "junk"]);
+const QUALITY_TAGS = new Set(["Most Interested", "Interested", "Least Interested", "Not Interested", "Junk"]);
 
 const getQualityTag = (score: number): string => {
-  if (score >= 80) return "hot";
-  if (score >= 60) return "warm";
-  if (score >= 40) return "neutral";
-  if (score >= 20) return "cold";
-  return "junk";
+  if (score >= 80) return "Most Interested";
+  if (score >= 60) return "Interested";
+  if (score >= 40) return "Least Interested";
+  if (score >= 20) return "Not Interested";
+  return "Junk";
 };
 
 // ─── Core message handler ─────────────────────────────────────────────────────
@@ -244,9 +245,16 @@ const handleIncomingMessages = async (body: any) => {
           };
           await pushToChatHistory(lead._id, lead.leadPhoneNumber, lead.businessPhoneNumber!, companyId, agentMsg);
 
-          // 10. Schedule or cancel follow-up
+          // 10. Schedule or cancel follow-up + set initial stage via AI when conversation ends
           if (conversationComplete) {
             await cancelFollowUp((lead._id as any).toString());
+            // Trigger AI stage eval if the lead has no stage yet
+            const freshLead = await Lead.findById(lead._id);
+            if (freshLead && !(freshLead as any).stage) {
+              evaluateLeadStage((lead._id as any).toString()).catch((err) =>
+                console.error("[StageEval] Post-conversation eval error:", err)
+              );
+            }
           } else {
             await scheduleFollowUp((lead._id as any).toString(), 1);
           }
@@ -343,7 +351,7 @@ const upsertLead = async (
       numberOfChatsMessages: 0,
       numberOfEnquiry: 1,
       status: "active",
-      tags: ["cold"],
+      tags: [],
     });
     console.log(`[${leadPhoneNumber}] New lead created`);
   }

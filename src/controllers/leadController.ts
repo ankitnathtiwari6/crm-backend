@@ -4,6 +4,8 @@ import ChatHistory from "../models/ChatHistory";
 import asyncHandler from "../utils/asyncHandler";
 import User from "../models/User";
 import { cancelFollowUp } from "../jobs/followUpJob";
+import { scheduleStageEval } from "../jobs/stageEvalJob";
+import { evaluateLeadStage } from "../utils/aiStageEvaluator";
 
 export const getLeads = asyncHandler(async (req: Request, res: Response) => {
   try {
@@ -113,6 +115,21 @@ export const getLeads = asyncHandler(async (req: Request, res: Response) => {
       filter.status = req.query.status;
     }
 
+    // Stage filtering (from funnel bar click)
+    if (req.query.stage) {
+      filter.stage = req.query.stage;
+    }
+
+    // AI-engaged filter (had at least one message from the lead)
+    if (req.query.aiEngaged === "true") {
+      filter.messageCount = { $gt: 0 };
+    }
+
+    // Quality score floor — used by Hot (≥70) funnel pill
+    if (req.query.minQualityScore) {
+      filter.leadQualityScore = { $gte: parseInt(req.query.minQualityScore as string) };
+    }
+
     // Count total documents for pagination
     const total = await Lead.countDocuments(filter);
 
@@ -164,6 +181,7 @@ export const getLeads = asyncHandler(async (req: Request, res: Response) => {
       messageCount: lead.messageCount,
       status: lead.status,
       stage: (lead as any).stage || null,
+      stageUpdatedBy: (lead as any).stageUpdatedBy || null,
       tags: lead.tags || [],
       source: lead.source || "WhatsApp",
       notes: lead.notes || null,
@@ -372,6 +390,12 @@ export const updateLead = asyncHandler(async (req: Request, res: Response) => {
     // Generate activity log entries for changed fields
     const newLogs = generateActivityLogs(lead.toObject(), updateData, author);
 
+    // Track stage attribution when counselor changes it manually
+    if ("stage" in updateData && updateData.stage !== (lead as any).stage) {
+      updateData.stageUpdatedAt = new Date();
+      updateData.stageUpdatedBy = "user";
+    }
+
     // Apply updates to the lead document
     Object.assign(lead, updateData);
     if (newLogs.length) {
@@ -405,6 +429,7 @@ export const updateLead = asyncHandler(async (req: Request, res: Response) => {
         messageCount: savedLead.messageCount,
         status: savedLead.status,
         stage: (savedLead as any).stage || null,
+        stageUpdatedBy: (savedLead as any).stageUpdatedBy || null,
         tags: savedLead.tags || [],
         source: savedLead.source || "WhatsApp",
         notes: savedLead.notes || null,
@@ -446,14 +471,29 @@ export const addRemark = asyncHandler(async (req: Request, res: Response) => {
       return res.status(404).json({ success: false, message: "User not found" });
     }
 
+    const remarkCreatedAt = new Date();
     const remark = {
       text: text.trim(),
       author: { id: requestUser._id.toString(), name: requestUser.name },
-      createdAt: new Date(),
+      createdAt: remarkCreatedAt,
     };
 
     (lead.remarks as any[]).push(remark);
     await lead.save();
+
+    // Schedule AI stage evaluation — fires after STAGE_AI_DELAY_MS (default 60s)
+    // If counselor manually updates stage before then, the job will skip AI
+    const leadId = (lead._id as any).toString();
+    if (!(lead as any).stage) {
+      // No stage yet — evaluate immediately instead of waiting
+      evaluateLeadStage(leadId, text.trim()).catch((err) =>
+        console.error("[StageEval] Immediate eval error:", err)
+      );
+    } else {
+      scheduleStageEval(leadId, remarkCreatedAt).catch((err) =>
+        console.error("[StageEval] Schedule error:", err)
+      );
+    }
 
     // Return the remark with its generated _id
     const saved = (lead.remarks as any[])[(lead.remarks as any[]).length - 1];
@@ -512,6 +552,59 @@ export const deleteLead = asyncHandler(async (req: Request, res: Response) => {
   } catch (error) {
     console.error("Error deleting lead:", error);
     res.status(500).json({ success: false, message: "Error deleting lead", error: (error as Error).message });
+  }
+});
+
+/**
+ * Funnel stats — counts per stage + AI engagement metrics
+ * @route GET /api/leads/funnel-stats
+ * @access Private
+ */
+export const getFunnelStats = asyncHandler(async (_req: Request, res: Response) => {
+  try {
+    const [result] = await Lead.aggregate([
+      {
+        $facet: {
+          total:            [{ $count: "count" }],
+          aiEngaged:        [{ $match: { messageCount: { $gt: 0 } } }, { $count: "count" }],
+          hot:              [{ $match: { leadQualityScore: { $gte: 70 } } }, { $count: "count" }],
+          warm:             [{ $match: { leadQualityScore: { $gte: 40, $lt: 70 } } }, { $count: "count" }],
+          cold:             [{ $match: { leadQualityScore: { $lt: 40, $ne: null } } }, { $count: "count" }],
+          notResponding:    [{ $match: { stage: "not_responding" } }, { $count: "count" }],
+          callStarted:      [{ $match: { stage: "call_started" } }, { $count: "count" }],
+          followUp:         [{ $match: { stage: "follow_up" } }, { $count: "count" }],
+          docsRequested:    [{ $match: { stage: "documents_requested" } }, { $count: "count" }],
+          docsReceived:     [{ $match: { stage: "documents_received" } }, { $count: "count" }],
+          applied:          [{ $match: { stage: "application_submitted" } }, { $count: "count" }],
+          won:              [{ $match: { stage: "closed_won" } }, { $count: "count" }],
+          lost:             [{ $match: { stage: "closed_lost" } }, { $count: "count" }],
+        },
+      },
+    ]);
+
+    const pick = (arr: { count: number }[]) => arr?.[0]?.count ?? 0;
+
+    res.status(200).json({
+      success: true,
+      stats: {
+        total:         pick(result.total),
+        aiEngaged:     pick(result.aiEngaged),
+        hot:           pick(result.hot),
+        warm:          pick(result.warm),
+        cold:          pick(result.cold),
+        notResponding: pick(result.notResponding),
+        callStarted:   pick(result.callStarted),
+        followUp:      pick(result.followUp),
+        docsRequested: pick(result.docsRequested),
+        docsReceived:  pick(result.docsReceived),
+        applied:       pick(result.applied),
+        won:           pick(result.won),
+        lost:          pick(result.lost),
+      },
+    });
+  } catch (error) {
+    console.error("Error fetching funnel stats:", error);
+    res.status(500).json({ success: false, message: "Error fetching funnel stats" });
   }
 });
 

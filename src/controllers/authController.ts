@@ -142,6 +142,8 @@ export const getCurrentUser = asyncHandler(
           id: user._id.toString(),
           name: user.name,
           email: user.email,
+          companyId: user.companyId?.toString() ?? null,
+          role: user.role,
         },
       });
     } catch (error) {

@@ -97,6 +97,8 @@ export interface ILead extends Document {
   targetYear?: number;
   budget?: string;
   stage?: string;
+  stageUpdatedAt?: Date;
+  stageUpdatedBy?: "ai" | "user";
   assignedTo?: IAssignedTo;
   numberOfEnquiry: number;
   numberOfChatsMessages: number;
@@ -151,6 +153,8 @@ const LeadSchema: Schema = new Schema(
       type: String,
       enum: ["not_responding", "call_started", "follow_up", "documents_requested", "documents_received", "application_submitted", "closed_won", "closed_lost"],
     },
+    stageUpdatedAt: { type: Date },
+    stageUpdatedBy: { type: String, enum: ["ai", "user"] },
     assignedTo: {
       id: { type: String },
       name: { type: String },

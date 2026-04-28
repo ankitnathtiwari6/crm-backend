@@ -48,7 +48,7 @@ export const getCompany = asyncHandler(async (req: Request, res: Response) => {
  * PUT /api/companies/:id
  */
 export const updateCompany = asyncHandler(async (req: Request, res: Response) => {
-  const { name, settings } = req.body;
+  const { name, settings, tags } = req.body;
 
   const company = await Company.findById(req.params.id);
   if (!company) {
@@ -58,6 +58,7 @@ export const updateCompany = asyncHandler(async (req: Request, res: Response) =>
   if (name) company.name = name;
   if (settings?.aiEnabled !== undefined) company.settings.aiEnabled = settings.aiEnabled;
   if (settings?.language) company.settings.language = settings.language;
+  if (Array.isArray(tags)) company.tags = tags;
 
   await company.save();
   res.status(200).json({ success: true, company });

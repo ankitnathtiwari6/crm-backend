@@ -166,6 +166,28 @@ export const defineFollowUpJob = () => {
         await scheduleFollowUp(leadId, nextStep, false); // false = don't reset startedAt
       } else {
         console.log(`[FollowUp] Sequence complete for ${leadId}`);
+        // Lead never replied after all follow-up steps — mark as not_responding
+        const finalLead = await Lead.findById(leadId);
+        if (finalLead && !(finalLead as any).stage) {
+          const now = new Date();
+          await Lead.findByIdAndUpdate(leadId, {
+            $set: {
+              stage: "not_responding",
+              stageUpdatedAt: now,
+              stageUpdatedBy: "ai",
+            },
+            $push: {
+              activityLog: {
+                action: 'Stage set to "Not Responding" — follow-up sequence ended with no reply',
+                field: "stage",
+                newValue: "not_responding",
+                author: { id: "ai", name: "AI Assistant" },
+                createdAt: now,
+              },
+            },
+          });
+          console.log(`[FollowUp] Lead ${leadId} marked as not_responding`);
+        }
         await clearFollowUp(leadId);
       }
     } catch (err) {

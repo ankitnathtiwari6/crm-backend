@@ -17,6 +17,7 @@ export interface ICompany extends Document {
   name: string;
   users: ICompanyUser[];
   whatsappNumbers: IWhatsappNumber[];
+  tags: string[];
   settings: {
     aiEnabled: boolean;
     language: string;
@@ -43,6 +44,7 @@ const CompanySchema = new Schema<ICompany>(
     name: { type: String, required: true, trim: true },
     users: [CompanyUserSchema],
     whatsappNumbers: [WhatsappNumberSchema],
+    tags: { type: [String], default: [] },
     settings: {
       aiEnabled: { type: Boolean, default: true },
       language: { type: String, default: "en" },

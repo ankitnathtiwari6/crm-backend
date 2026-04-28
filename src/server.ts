@@ -13,6 +13,7 @@ import companyRoutes from "./routes/companyRoutes";
 import trainingRoutes from "./routes/trainingRoutes";
 import agenda from "./jobs/agenda";
 import { defineFollowUpJob, purgeOrphanedFollowUpJobs } from "./jobs/followUpJob";
+import { defineStageEvalJob } from "./jobs/stageEvalJob";
 // Load environment variables
 dotenv.config();
 
@@ -50,6 +51,7 @@ app.use("/api/training", trainingRoutes);
 
 // Start Agenda job scheduler
 defineFollowUpJob();
+defineStageEvalJob();
 agenda.start().then(async () => {
   console.log("Agenda scheduler started");
   await purgeOrphanedFollowUpJobs();

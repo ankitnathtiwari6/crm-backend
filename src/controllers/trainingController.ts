@@ -25,10 +25,48 @@ function getPinecone(): Pinecone {
 
 async function createEmbedding(text: string): Promise<number[]> {
   const response = await getOpenAI().embeddings.create({
-    model: "text-embedding-3-small",
+    model: "text-embedding-3-large",
     input: text.slice(0, 8000),
   });
   return response.data[0].embedding;
+}
+
+async function embedSingleSuggestion(
+  suggestion: any,
+  chatHistoryId?: string
+): Promise<void> {
+  const conversationText = formatConversation(suggestion.conversationContext);
+  console.log(`[Pinecone] Creating OpenAI embedding, text length: ${conversationText.length}`);
+  const embedding = await createEmbedding(conversationText);
+  console.log(`[Pinecone] Embedding created, dimensions: ${embedding.length}`);
+
+  const id = (suggestion._id as mongoose.Types.ObjectId).toString();
+  const ns = suggestion.companyId.toString();
+  console.log(`[Pinecone] Upserting to index "${PINECONE_INDEX}", namespace "${ns}", id "${id}"`);
+
+  await getPinecone().index(PINECONE_INDEX).namespace(ns).upsert({
+    records: [
+      {
+        id,
+        values: embedding,
+        metadata: {
+          trainingSuggestionId: id,
+          chatHistoryId: chatHistoryId ?? "",
+          leadId: suggestion.leadId.toString(),
+          companyId: ns,
+          suggestedReply: suggestion.suggestedReply.slice(0, 500),
+          originalAiReply: suggestion.originalAiReply.slice(0, 500),
+          conversationText: conversationText.slice(0, 1000),
+        },
+      },
+    ],
+  });
+
+  console.log(`[Pinecone] Upsert done, marking isEmbedded in DB`);
+  await TrainingSuggestion.findByIdAndUpdate(suggestion._id, {
+    isEmbedded: true,
+    pineconeId: id,
+  });
 }
 
 function formatConversation(
@@ -139,7 +177,21 @@ export const saveSuggestion = asyncHandler(
       { upsert: true, new: true }
     );
 
-    res.json({ suggestion });
+    // Auto-embed to Pinecone immediately
+    let embedError: string | null = null;
+    try {
+      console.log(`[Pinecone] Starting embed for suggestion ${suggestion._id}`);
+      const chatHistory = await ChatHistory.findOne({ leadId });
+      const chatHistoryId = chatHistory?._id?.toString() ?? "";
+      await embedSingleSuggestion(suggestion, chatHistoryId);
+      suggestion.isEmbedded = true;
+      console.log(`[Pinecone] Embed success for suggestion ${suggestion._id}`);
+    } catch (err: any) {
+      embedError = err?.message ?? String(err);
+      console.error(`[Pinecone] Embed failed for suggestion ${suggestion._id}:`, err);
+    }
+
+    res.json({ suggestion, embedError });
   }
 );
 
@@ -176,41 +228,19 @@ export const embedSuggestions = asyncHandler(
 
     const suggestions = await TrainingSuggestion.find(query);
 
-    const index = getPinecone().index(PINECONE_INDEX);
     let embedded = 0;
     const errors: string[] = [];
 
+    const chatHistoryMap: Record<string, string> = {};
+
     for (const suggestion of suggestions) {
       try {
-        const conversationText = formatConversation(
-          suggestion.conversationContext
-        );
-        const embedding = await createEmbedding(conversationText);
-        const id = (suggestion._id as mongoose.Types.ObjectId).toString();
-        const ns = suggestion.companyId.toString();
-
-        await index.upsert({
-          records: [
-            {
-              id,
-              values: embedding,
-              metadata: {
-                leadId: suggestion.leadId.toString(),
-                companyId: ns,
-                suggestedReply: suggestion.suggestedReply.slice(0, 500),
-                originalAiReply: suggestion.originalAiReply.slice(0, 500),
-                conversationText: conversationText.slice(0, 1000),
-              },
-            },
-          ],
-          namespace: ns,
-        });
-
-        await TrainingSuggestion.findByIdAndUpdate(suggestion._id, {
-          isEmbedded: true,
-          pineconeId: id,
-        });
-
+        const lid = suggestion.leadId.toString();
+        if (!chatHistoryMap[lid]) {
+          const ch = await ChatHistory.findOne({ leadId: lid });
+          chatHistoryMap[lid] = ch?._id?.toString() ?? "";
+        }
+        await embedSingleSuggestion(suggestion, chatHistoryMap[lid]);
         embedded++;
       } catch (err: any) {
         errors.push(`${(suggestion._id as mongoose.Types.ObjectId).toString()}: ${err.message}`);
@@ -249,3 +279,46 @@ export const getStats = asyncHandler(async (_req: Request, res: Response) => {
   const embedded = await TrainingSuggestion.countDocuments({ isEmbedded: true });
   res.json({ total, embedded, unembedded: total - embedded });
 });
+
+// POST /api/training/leads/:leadId/generate-reply
+export const generateSuggestedReply = asyncHandler(
+  async (req: Request, res: Response) => {
+    const { leadId } = req.params;
+    const { conversationContext, originalAiReply, userInstruction } = req.body;
+
+    const lead = await Lead.findById(leadId);
+    if (!lead) return res.status(404).json({ message: "Lead not found" });
+
+    const conversationText = conversationContext?.length
+      ? formatConversation(conversationContext)
+      : "";
+
+    const prompt = `You are an expert WhatsApp sales consultant for MBBS abroad admissions.
+
+A human trainer is reviewing an AI-generated response and wants to suggest a better reply.
+${conversationText ? `\nConversation so far:\n${conversationText}\n` : ""}
+Original AI reply:
+"${originalAiReply}"
+
+Trainer's instruction:
+"${userInstruction}"
+
+Generate an improved reply that:
+1. Follows the trainer's instruction exactly (tone, style, length)
+2. Fits naturally into the conversation flow
+3. Is appropriate for WhatsApp (conversational, not too long)
+4. Stays focused on MBBS abroad admissions
+
+Output ONLY the reply text — no explanations, no quotes, no prefix.`;
+
+    const response = await getOpenAI().chat.completions.create({
+      model: "gpt-4.1-mini",
+      messages: [{ role: "user", content: prompt }],
+      max_completion_tokens: 500,
+      temperature: 0.7,
+    });
+
+    const generatedReply = response.choices[0]?.message?.content?.trim() ?? "";
+    res.json({ generatedReply });
+  }
+);

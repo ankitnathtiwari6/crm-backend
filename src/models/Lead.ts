@@ -107,6 +107,7 @@ export interface ILead extends Document {
   messageCount: number;
   status: "active" | "inactive" | "archived";
   tags?: string[];
+  aiTags?: string[];
   source?: string;
   notes?: string;
   chatHistory: IMessage[];
@@ -170,6 +171,7 @@ const LeadSchema: Schema = new Schema(
       default: "active",
     },
     tags: [String],
+    aiTags: [String],
     source: { type: String },
     notes: { type: String },
     chatHistory: [MessageSchema],

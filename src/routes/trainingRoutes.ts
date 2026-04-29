@@ -9,6 +9,7 @@ import {
   embedSuggestions,
   searchSimilar,
   getStats,
+  generateSuggestedReply,
 } from "../controllers/trainingController";
 
 const router = Router();
@@ -19,6 +20,7 @@ router.get("/companies", getCompanies);
 router.get("/companies/:companyId/leads", getLeadsForCompany);
 router.get("/leads/:leadId/chat", getChatWithSuggestions);
 router.post("/leads/:leadId/suggestions", saveSuggestion);
+router.post("/leads/:leadId/generate-reply", generateSuggestedReply);
 router.delete("/suggestions/:suggestionId", deleteSuggestion);
 router.post("/embed", embedSuggestions);
 router.post("/embed/:leadId", embedSuggestions);

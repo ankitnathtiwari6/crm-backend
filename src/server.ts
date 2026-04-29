@@ -12,7 +12,10 @@ import authRoutes from "./routes/authRoutes";
 import companyRoutes from "./routes/companyRoutes";
 import trainingRoutes from "./routes/trainingRoutes";
 import agenda from "./jobs/agenda";
-import { defineFollowUpJob, purgeOrphanedFollowUpJobs } from "./jobs/followUpJob";
+import {
+  defineFollowUpJob,
+  purgeOrphanedFollowUpJobs,
+} from "./jobs/followUpJob";
 import { defineStageEvalJob } from "./jobs/stageEvalJob";
 // Load environment variables
 dotenv.config();
@@ -27,14 +30,17 @@ const PORT = process.env.PORT || 5000;
 // Middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use(cors({
-  origin: [
-    "https://ankitnathtiwari6.github.io",
-    "http://localhost:5173",
-    "http://localhost:3000",
-  ],
-  credentials: true,
-}));
+app.use(
+  cors({
+    origin: [
+      "https://ankitnathtiwari6.github.io",
+      "http://localhost:5173",
+      "http://localhost:5174",
+      "http://localhost:3000",
+    ],
+    credentials: true,
+  }),
+);
 app.use(helmet());
 
 // Logging in development environment

@@ -273,9 +273,8 @@ const handleIncomingMessages = async (body: any) => {
             updateFields.leadQualityScore = leadQualityScore;
             updateFields.leadQualityScoreReason = leadQualityScoreReason ?? "";
             updateFields.leadQualityScoreUpdatedAt = new Date();
-            // Sync the quality tag — replace any existing quality tag, keep other tags
-            const otherTags = (lead.tags ?? []).filter((t) => !QUALITY_TAGS.has(t));
-            updateFields.tags = [...otherTags, getQualityTag(leadQualityScore)];
+            // Sync the AI quality tag into aiTags only — never touch manual tags
+            updateFields.aiTags = [getQualityTag(leadQualityScore)];
           }
 
           const sessionUpdate: any = {

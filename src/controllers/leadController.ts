@@ -558,6 +558,103 @@ export const deleteLead = asyncHandler(async (req: Request, res: Response) => {
 });
 
 /**
+ * Dashboard stats — rich aggregated metrics for the dashboard
+ * @route GET /api/leads/dashboard-stats
+ * @access Private
+ */
+export const getDashboardStats = asyncHandler(async (req: Request, res: Response) => {
+  try {
+    const now = new Date();
+    const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+    const [result] = await Lead.aggregate([
+      {
+        $facet: {
+          avgQualityScore: [
+            { $match: { leadQualityScore: { $exists: true, $ne: null } } },
+            { $group: { _id: null, avg: { $avg: "$leadQualityScore" }, count: { $sum: 1 } } },
+          ],
+          unassigned: [
+            { $match: { $or: [{ "assignedTo": null }, { "assignedTo": { $exists: false } }, { "assignedTo.id": { $exists: false } }] } },
+            { $count: "count" },
+          ],
+          activeLastWeek: [
+            { $match: { lastInteraction: { $gte: weekAgo } } },
+            { $count: "count" },
+          ],
+          activeLastMonth: [
+            { $match: { lastInteraction: { $gte: monthAgo } } },
+            { $count: "count" },
+          ],
+          avgMessagesPerEngaged: [
+            { $match: { messageCount: { $gt: 0 } } },
+            { $group: { _id: null, avg: { $avg: "$messageCount" } } },
+          ],
+          avgNeetScore: [
+            { $match: { neetScore: { $exists: true, $ne: null, $gt: 0 } } },
+            { $group: { _id: null, avg: { $avg: "$neetScore" }, count: { $sum: 1 } } },
+          ],
+          topCountries: [
+            { $match: { preferredCountry: { $exists: true, $nin: [null, ""] } } },
+            { $group: { _id: "$preferredCountry", count: { $sum: 1 } } },
+            { $sort: { count: -1 } },
+            { $limit: 6 },
+          ],
+          qualificationBreakdown: [
+            { $match: { qualification: { $exists: true, $ne: null } } },
+            { $group: { _id: "$qualification", count: { $sum: 1 } } },
+            { $sort: { count: -1 } },
+          ],
+          contactTypeBreakdown: [
+            { $match: { contactType: { $exists: true, $nin: [null, "unknown"] } } },
+            { $group: { _id: "$contactType", count: { $sum: 1 } } },
+            { $sort: { count: -1 } },
+          ],
+          leadsWithBudget: [
+            { $match: { budget: { $exists: true, $nin: [null, ""] } } },
+            { $count: "count" },
+          ],
+          newThisWeek: [
+            { $match: { createdAt: { $gte: weekAgo } } },
+            { $count: "count" },
+          ],
+          newThisMonth: [
+            { $match: { createdAt: { $gte: monthAgo } } },
+            { $count: "count" },
+          ],
+        },
+      },
+    ]);
+
+    const pick = (arr: any[], key = "count") => arr?.[0]?.[key] ?? 0;
+
+    res.status(200).json({
+      success: true,
+      stats: {
+        avgQualityScore: Math.round(pick(result.avgQualityScore, "avg") * 10) / 10,
+        scoredLeads: pick(result.avgQualityScore, "count"),
+        unassigned: pick(result.unassigned),
+        activeLastWeek: pick(result.activeLastWeek),
+        activeLastMonth: pick(result.activeLastMonth),
+        avgMessagesPerEngaged: Math.round(pick(result.avgMessagesPerEngaged, "avg") * 10) / 10,
+        avgNeetScore: Math.round(pick(result.avgNeetScore, "avg")),
+        neetScoredLeads: pick(result.avgNeetScore, "count"),
+        leadsWithBudget: pick(result.leadsWithBudget),
+        newThisWeek: pick(result.newThisWeek),
+        newThisMonth: pick(result.newThisMonth),
+        topCountries: (result.topCountries ?? []).map((c: any) => ({ name: c._id, count: c.count })),
+        qualificationBreakdown: (result.qualificationBreakdown ?? []).map((q: any) => ({ name: q._id, count: q.count })),
+        contactTypeBreakdown: (result.contactTypeBreakdown ?? []).map((c: any) => ({ name: c._id, count: c.count })),
+      },
+    });
+  } catch (error) {
+    console.error("Error fetching dashboard stats:", error);
+    res.status(500).json({ success: false, message: "Error fetching dashboard stats" });
+  }
+});
+
+/**
  * Funnel stats — counts per stage + AI engagement metrics
  * @route GET /api/leads/funnel-stats
  * @access Private

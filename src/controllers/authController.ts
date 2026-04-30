@@ -13,7 +13,7 @@ import mongoose from "mongoose";
 export const registerUser = asyncHandler(
   async (req: Request, res: Response) => {
     try {
-      const { name, email, password } = req.body;
+      const { name, email, password, role } = req.body;
 
       const userExists = await User.findOne({ email });
       if (userExists) {
@@ -28,6 +28,7 @@ export const registerUser = asyncHandler(
         name,
         email,
         password,
+        ...(role && { role }),
       });
 
       // Generate token
@@ -39,6 +40,7 @@ export const registerUser = asyncHandler(
           id: user._id.toString(),
           name: user.name,
           email: user.email,
+          role: user.role,
         },
         token,
       });
@@ -105,6 +107,7 @@ export const loginUser = asyncHandler(async (req: Request, res: Response) => {
         id: user._id.toString(),
         name: user.name,
         email: user.email,
+        role: user.role,
       },
       token,
     });

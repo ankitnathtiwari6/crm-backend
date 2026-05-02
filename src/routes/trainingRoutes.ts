@@ -5,6 +5,8 @@ import {
   getLeadsForCompany,
   getChatWithSuggestions,
   saveSuggestion,
+  embedConfirmed,
+  updateSuggestion,
   deleteSuggestion,
   embedSuggestions,
   searchSimilar,
@@ -21,6 +23,8 @@ router.get("/companies/:companyId/leads", getLeadsForCompany);
 router.get("/leads/:leadId/chat", getChatWithSuggestions);
 router.post("/leads/:leadId/suggestions", saveSuggestion);
 router.post("/leads/:leadId/generate-reply", generateSuggestedReply);
+router.post("/suggestions/:suggestionId/embed", embedConfirmed);
+router.put("/suggestions/:suggestionId", updateSuggestion);
 router.delete("/suggestions/:suggestionId", deleteSuggestion);
 router.post("/embed", embedSuggestions);
 router.post("/embed/:leadId", embedSuggestions);

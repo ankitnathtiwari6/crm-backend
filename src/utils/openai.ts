@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 import dotenv from "dotenv";
+import { getToneInjection } from "./toneInjector";
 
 dotenv.config();
 
@@ -204,7 +205,9 @@ export interface FollowUpContext {
 export const runCounselorAgent = async (
   chatHistory: Array<{ role: "lead" | "assistant"; content: string }>,
   leadData: LeadContext,
-  followUp?: FollowUpContext
+  followUp?: FollowUpContext,
+  companyId?: string,
+  ragEnabled: boolean = true
 ): Promise<AgentResult> => {
   try {
     // Build a context summary of what we already know about this lead
@@ -293,10 +296,14 @@ ${followUp.followUpStep === 1
         content: msg.content,
       }));
 
+    const toneSection = companyId
+      ? await getToneInjection(chatHistory, companyId, ragEnabled)
+      : "";
+
     const response = await getClient().chat.completions.create({
       model: "gpt-5.4-mini-2026-03-17",
       messages: [
-        { role: "system", content: SYSTEM_PROMPT + contextNote },
+        { role: "system", content: SYSTEM_PROMPT + contextNote + toneSection },
         ...messages,
       ],
       max_completion_tokens: 2000,

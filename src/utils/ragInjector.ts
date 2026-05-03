@@ -104,6 +104,7 @@ function formatMatches(
 ): string {
   const examples = matches.map((match, i) => {
     const m = match.metadata;
+    const score = match.score.toFixed(3);
     const strategy = m.strategy
       ? String(m.strategy)
           .split(" | ")
@@ -116,10 +117,15 @@ function formatMatches(
           .map((s: string) => `  - ${s.trim()}`)
           .join("\n")
       : "";
+    // Show the scenario context (first 8 lines of embedText — situation/stage/intent)
+    const scenarioContext = m.embedText
+      ? String(m.embedText).split("\n").slice(0, 8).join("\n")
+      : "";
 
     return [
-      `[Example ${i + 1}]`,
-      `How we replied:`,
+      `[Example ${i + 1}] (similarity: ${score})`,
+      scenarioContext ? `Scenario:\n${scenarioContext}` : "",
+      `Best reply for this scenario:`,
       `"${m.suggestedReply ?? ""}"`,
       strategy ? `\nApproach:\n${strategy}` : "",
       antiPatterns ? `\nAvoid:\n${antiPatterns}` : "",
@@ -130,9 +136,9 @@ function formatMatches(
 
   return `
 
-## Tone & Style Reference (matched from your training examples)
+## Similar Scenario Examples (from your training data)
 
-Use these as tone and approach reference only — adapt to this specific conversation, do not copy verbatim.
+These are your best replies for similar past scenarios. Use the most relevant one as your primary template — adapt it to the current conversation, keeping the same quality, tone, and approach.
 
 ---
 ${examples.join("\n\n---\n")}`;
@@ -145,7 +151,9 @@ export async function getRagInjection(
 ): Promise<string | null> {
   try {
     const situationQuery = await generateSituationQuery(messages);
-    console.log(`[RAG] HyDE query generated (${situationQuery.length} chars)`);
+    console.log(
+      `[RAG] HyDE query generated (${situationQuery.length} chars):\n${"─".repeat(60)}\n${situationQuery}\n${"─".repeat(60)}`,
+    );
 
     const embedding = await createEmbedding(situationQuery);
     const matches = await queryPinecone(embedding, companyId);
@@ -157,9 +165,16 @@ export async function getRagInjection(
       return null;
     }
 
-    console.log(
-      `[RAG] ${matches.length} match(es) found, top score: ${matches[0].score.toFixed(3)}`,
-    );
+    console.log(`[RAG] ${matches.length} match(es) found:`);
+    matches.forEach((m, i) => {
+      const embed = m.metadata.embedText
+        ? String(m.metadata.embedText).split("\n").slice(0, 6).join("\n")
+        : "(no embedText)";
+      const reply = m.metadata.suggestedReply ?? "(no reply)";
+      console.log(
+        `  [${i + 1}] score=${m.score.toFixed(3)}\n  Scenario:\n${embed}\n  Best reply: "${reply}"\n`,
+      );
+    });
     return formatMatches(matches);
   } catch (err: any) {
     console.error("[RAG] ragInjector error:", err?.message ?? err);

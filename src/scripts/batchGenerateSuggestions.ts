@@ -3,7 +3,8 @@
  *
  * For every lead with leadQualityScore > MIN_SCORE, generates a pending_review
  * TrainingSuggestion for each AI message that has no suggestion yet.
- * Uses the already-embedded training examples as style reference.
+ * Uses Pinecone RAG (via getRagInjection) to find the most similar training
+ * examples per message — this also validates that the RAG pipeline is working.
  * Does NOT embed anything — trainer reviews and confirms manually.
  *
  * Usage:
@@ -26,6 +27,7 @@ import {
   generateReply,
   formatConversationForReply as formatConversation,
 } from "../utils/replyGenerator";
+import { getRagInjection } from "../utils/ragInjector";
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
@@ -146,23 +148,6 @@ async function main() {
   await mongoose.connect(process.env.MONGODB_URI);
   console.log("[DB] Connected");
 
-  // Load embedded training examples as style reference
-  const embedded = await TrainingSuggestion.find({ isEmbedded: true })
-    .select("suggestedReply situation")
-    .limit(8);
-
-  const styleExamples = embedded
-    .filter((s) => s.suggestedReply && s.situation)
-    .slice(0, 5)
-    .map(
-      (s, i) =>
-        `[${i + 1}] Situation: ${s.situation}\nReply: "${s.suggestedReply}"`,
-    )
-    .join("\n\n");
-
-  console.log(
-    `[Style] ${embedded.length} embedded examples loaded as style reference`,
-  );
   if (dryRun) console.log("[Mode] DRY RUN — nothing will be saved\n");
 
   // Find qualifying leads
@@ -184,6 +169,8 @@ async function main() {
   let totalGenerated = 0;
   let totalSkipped = 0;
   let totalErrors = 0;
+  let ragHits = 0;
+  let ragMisses = 0;
 
   for (const lead of leads) {
     const leadId = (lead._id as mongoose.Types.ObjectId).toString();
@@ -234,19 +221,32 @@ async function main() {
       }
 
       try {
-        // Step 1 — generate best reply
+        // Step 1 — RAG lookup (HyDE → embed → Pinecone)
+        const companyId = (lead as any).companyId?.toString() ?? "";
+        const ragInjection = await getRagInjection(context, companyId);
+        if (ragInjection) ragHits++;
+        else ragMisses++;
+        await sleep(CALL_DELAY_MS);
+
+        // Step 2 — generate best reply using RAG examples as primary template
+        const instruction = ragInjection
+          ? "Adapt the most relevant example above to this exact conversation."
+          : deriveInstruction(context);
         const suggestedReply = await generateReply({
           conversationContext: context,
-          instruction: deriveInstruction(context),
-          styleExamples,
+          instruction,
+          styleExamples: ragInjection ?? undefined,
         });
         if (!suggestedReply) {
           console.log(`    [skip] empty reply for msg[${index}]`);
           continue;
         }
+        console.log(
+          `    [generated reply]\n${"·".repeat(60)}\n${suggestedReply}\n${"·".repeat(60)}`,
+        );
         await sleep(CALL_DELAY_MS);
 
-        // Step 2 — generate metadata fields
+        // Step 3 — generate metadata fields
         const meta = await analyzeForTraining({
           context,
           suggestedReply,
@@ -272,9 +272,7 @@ async function main() {
           { upsert: true, new: true },
         );
 
-        console.log(
-          `    [ok] msg[${index}]: "${suggestedReply.slice(0, 60).replace(/\n/g, " ")}…"`,
-        );
+        console.log(`    [ok] msg[${index}] saved`);
         totalGenerated++;
       } catch (err: any) {
         console.error(`    [err] msg[${index}]: ${err?.message}`);
@@ -286,6 +284,9 @@ async function main() {
 
   console.log(
     `\n[Done] Generated: ${totalGenerated} | Errors: ${totalErrors} | Leads skipped: ${totalSkipped}`,
+  );
+  console.log(
+    `[RAG]  Hits: ${ragHits} | Misses: ${ragMisses} | Hit rate: ${totalGenerated > 0 ? ((ragHits / (ragHits + ragMisses)) * 100).toFixed(1) : 0}%`,
   );
   await mongoose.disconnect();
 }

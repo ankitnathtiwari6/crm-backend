@@ -70,17 +70,19 @@ export async function generateReply(params: {
   const prompt = [
     "You are an expert WhatsApp sales consultant for MBBS abroad admissions at Global Grads.",
     "",
-    styleExamples
-      ? `## Style reference (tone/approach only — do NOT copy verbatim):\n${styleExamples}`
-      : "",
+    styleExamples ?? "",
     "",
     conversationText ? `Conversation so far:\n${conversationText}` : "",
     "",
     prevBlock,
-    `Instruction:\n"${instruction}"`,
+    styleExamples
+      ? `Fallback instruction (use only if none of the examples above are a good fit):\n"${instruction}"`
+      : `Instruction:\n"${instruction}"`,
     "",
     "Generate a reply that:",
-    "1. Follows the instruction exactly (tone, style, length)",
+    styleExamples
+      ? "1. Adapts the most relevant example above — same structure, tone, and approach, tailored to this specific conversation"
+      : "1. Follows the instruction exactly (tone, style, length)",
     "2. Fits naturally into the conversation flow",
     "3. Is short and WhatsApp-appropriate (2–4 lines max)",
     "4. Stays focused on MBBS abroad admissions",

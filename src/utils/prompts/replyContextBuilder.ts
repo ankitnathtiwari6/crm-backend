@@ -12,7 +12,7 @@ export const buildReplyContext = (leadData: LeadContext, isFirstMessage: boolean
   if (isFirstMessage && knownInfo.length === 0) {
     return `
 
-This is the very first message. Send one short warm welcome line, then in the same message casually ask for their name, city & state, whether they're in 12th / passed / dropper, NEET score & year, preferred country, and budget. Keep it under 3 lines total. No bullet points — write like a person texting.`;
+This is the very first message. Send one short warm welcome line, then ask for all missing fields — each on its own new line, no bullets, no numbers. Fields to ask: name, city & state, whether they're in 12th / passed / dropper, NEET score & year, preferred country, budget.`;
   }
 
   const alreadyPart = knownInfo.length > 0
@@ -20,7 +20,7 @@ This is the very first message. Send one short warm welcome line, then in the sa
     : "";
 
   const missingPart = missingFields.length > 0
-    ? `Still missing: ${missingFields.join(", ")}. Ask for all of them together in one casual message — no bullet points, no lists. Do NOT re-ask anything already collected.`
+    ? `Still missing: ${missingFields.join(", ")}. Ask for all of them in one message. If 3 or more fields: use a short lead-in line then each field on its own new line (no bullets, no numbers). If 1–2 fields: one natural sentence is fine. Do NOT re-ask anything already collected.`
     : `All key fields collected. Do not ask for more information.${isReturningLead ? " This is a RETURNING LEAD who re-engaged — high conversion signal. Lead quality score must be at least 80." : " This lead has completed intake — score must be at least 75."}`;
 
   return `\n\n${alreadyPart}${missingPart}${engagementSummary}`;

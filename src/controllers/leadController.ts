@@ -21,6 +21,7 @@ export const getLeads = asyncHandler(async (req: Request, res: Response) => {
         { leadPhoneNumber: searchRegex },
         { name: searchRegex },
         { email: searchRegex },
+        { city: searchRegex },
       ];
     }
 

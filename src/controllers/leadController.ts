@@ -16,118 +16,101 @@ export const getLeads = asyncHandler(async (req: Request, res: Response) => {
     const filter: any = {};
 
     if (req.query.search) {
+      // Search by phone or name only — skip all other filters so the result isn't inadvertently hidden
       const searchRegex = new RegExp(req.query.search as string, "i");
       filter.$or = [
         { leadPhoneNumber: searchRegex },
         { name: searchRegex },
-        { email: searchRegex },
       ];
-    }
+    } else {
+      if (req.query.neetStatus) {
+        if (req.query.neetStatus === "withScore") {
+          filter.neetScore = { $exists: true, $ne: null };
+        } else if (req.query.neetStatus === "withoutScore") {
+          filter.neetScore = { $exists: false };
+        }
+      }
 
-    if (req.query.neetStatus) {
-      if (req.query.neetStatus === "withScore") {
+      if (req.query.minScore || req.query.maxScore) {
         filter.neetScore = { $exists: true, $ne: null };
-      } else if (req.query.neetStatus === "withoutScore") {
-        filter.neetScore = { $exists: false };
-      }
-    }
-
-    if (req.query.minScore || req.query.maxScore) {
-      filter.neetScore = { $exists: true, $ne: null };
-      if (req.query.minScore) filter.neetScore.$gte = parseInt(req.query.minScore as string);
-      if (req.query.maxScore) filter.neetScore.$lte = parseInt(req.query.maxScore as string);
-    }
-
-    // Country filtering
-    if (req.query.country) {
-      filter.preferredCountry = new RegExp(req.query.country as string, "i");
-    }
-
-    // Location filtering (city or state)
-    if (req.query.location) {
-      const locationRegex = new RegExp(req.query.location as string, "i");
-      filter.$or = [
-        ...(filter.$or || []),
-        { city: locationRegex },
-        { state: locationRegex },
-      ];
-    }
-
-    // Assigned to filtering
-    if (req.query.assignedTo) {
-      filter["assignedTo.id"] = req.query.assignedTo as string;
-    }
-
-    // Unassigned leads filtering
-    if (req.query.unassigned === "true") {
-      filter["assignedTo"] = { $exists: false };
-    }
-
-    // Tags filtering — always use $all so multiple selections are AND (lead must have every selected tag)
-    const tags = req.query.tags;
-    if (tags) {
-      const tagArray = Array.isArray(tags) ? tags : [tags];
-      if (tagArray.length > 0) {
-        filter.tags = { $all: tagArray };
-      }
-    }
-
-    // Qualified leads (can be customized based on your definition of qualified)
-    if (req.query.isQualified === "true") {
-      filter.$and = [
-        { neetScore: { $exists: true, $ne: null } },
-        { neetScore: { $gte: 500 } }, // Example threshold
-      ];
-    }
-
-    // Created-at date range filtering
-    if (req.query.startDate || req.query.endDate) {
-      filter.createdAt = {};
-
-      if (req.query.startDate) {
-        filter.createdAt.$gte = new Date(req.query.startDate as string);
+        if (req.query.minScore) filter.neetScore.$gte = parseInt(req.query.minScore as string);
+        if (req.query.maxScore) filter.neetScore.$lte = parseInt(req.query.maxScore as string);
       }
 
-      if (req.query.endDate) {
-        const endDate = new Date(req.query.endDate as string);
-        endDate.setDate(endDate.getDate() + 1);
-        filter.createdAt.$lte = endDate;
-      }
-    }
-
-    // Active date (lastInteraction) range filtering
-    if (req.query.activeStartDate || req.query.activeEndDate) {
-      filter.lastInteraction = {};
-
-      if (req.query.activeStartDate) {
-        filter.lastInteraction.$gte = new Date(req.query.activeStartDate as string);
+      if (req.query.country) {
+        filter.preferredCountry = new RegExp(req.query.country as string, "i");
       }
 
-      if (req.query.activeEndDate) {
-        const endDate = new Date(req.query.activeEndDate as string);
-        endDate.setDate(endDate.getDate() + 1);
-        filter.lastInteraction.$lte = endDate;
+      // Location filtering (city or state)
+      if (req.query.location) {
+        filter.$or = [
+          { city: new RegExp(req.query.location as string, "i") },
+          { state: new RegExp(req.query.location as string, "i") },
+        ];
       }
-    }
 
-    // Status filtering
-    if (req.query.status) {
-      filter.status = req.query.status;
-    }
+      if (req.query.assignedTo) {
+        filter["assignedTo.id"] = req.query.assignedTo as string;
+      }
 
-    // Stage filtering (from funnel bar click)
-    if (req.query.stage) {
-      filter.stage = req.query.stage;
-    }
+      if (req.query.unassigned === "true") {
+        filter["assignedTo"] = { $exists: false };
+      }
 
-    // AI-engaged filter (had at least one message from the lead)
-    if (req.query.aiEngaged === "true") {
-      filter.messageCount = { $gt: 0 };
-    }
+      const tags = req.query.tags;
+      if (tags) {
+        const tagArray = Array.isArray(tags) ? tags : [tags];
+        if (tagArray.length > 0) {
+          filter.tags = { $all: tagArray };
+        }
+      }
 
-    // Quality score floor — used by Hot (≥70) funnel pill
-    if (req.query.minQualityScore) {
-      filter.leadQualityScore = { $gte: parseInt(req.query.minQualityScore as string) };
+      if (req.query.isQualified === "true") {
+        filter.$and = [
+          { neetScore: { $exists: true, $ne: null } },
+          { neetScore: { $gte: 500 } },
+        ];
+      }
+
+      if (req.query.startDate || req.query.endDate) {
+        filter.createdAt = {};
+        if (req.query.startDate) {
+          filter.createdAt.$gte = new Date(req.query.startDate as string);
+        }
+        if (req.query.endDate) {
+          const endDate = new Date(req.query.endDate as string);
+          endDate.setDate(endDate.getDate() + 1);
+          filter.createdAt.$lte = endDate;
+        }
+      }
+
+      if (req.query.activeStartDate || req.query.activeEndDate) {
+        filter.lastInteraction = {};
+        if (req.query.activeStartDate) {
+          filter.lastInteraction.$gte = new Date(req.query.activeStartDate as string);
+        }
+        if (req.query.activeEndDate) {
+          const endDate = new Date(req.query.activeEndDate as string);
+          endDate.setDate(endDate.getDate() + 1);
+          filter.lastInteraction.$lte = endDate;
+        }
+      }
+
+      if (req.query.status) {
+        filter.status = req.query.status;
+      }
+
+      if (req.query.stage) {
+        filter.stage = req.query.stage;
+      }
+
+      if (req.query.aiEngaged === "true") {
+        filter.messageCount = { $gt: 0 };
+      }
+
+      if (req.query.minQualityScore) {
+        filter.leadQualityScore = { $gte: parseInt(req.query.minQualityScore as string) };
+      }
     }
 
     // Count total documents for pagination

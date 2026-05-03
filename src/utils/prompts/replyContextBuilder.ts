@@ -12,7 +12,7 @@ export const buildReplyContext = (leadData: LeadContext, isFirstMessage: boolean
   if (isFirstMessage && knownInfo.length === 0) {
     return `
 
-This is the very first message. Send one short warm welcome line, then in the same message casually ask for their name, city & state, NEET score & year, preferred country, and budget. Keep it under 3 lines total. No bullet points — write like a person texting.`;
+This is the very first message. Send one short warm welcome line, then in the same message casually ask for their name, city & state, whether they're in 12th / passed / dropper, NEET score & year, preferred country, and budget. Keep it under 3 lines total. No bullet points — write like a person texting.`;
   }
 
   const alreadyPart = knownInfo.length > 0
@@ -47,8 +47,10 @@ const collectMissingFields = (leadData: LeadContext): string[] => {
   const missing: string[] = [];
   if (!leadData.name) missing.push("Name");
   if (!leadData.city || !leadData.state) missing.push("City & State");
-  if (leadData.neetScore == null) missing.push("NEET score & year of exam");
-  if (!leadData.qualification) missing.push("Qualification (12th appeared / passed / dropper)");
+  // Students appearing for NEET for the first time haven't taken it yet — score is not applicable
+  const neetNotApplicable = leadData.qualification === "12th_appearing";
+  if (leadData.neetScore == null && !neetNotApplicable) missing.push("NEET score & year of exam");
+  if (!leadData.qualification) missing.push("Is the student currently in 12th, passed 12th, or a dropper?");
   if (!leadData.preferredCountry) missing.push("Preferred country for MBBS");
   if (!leadData.budget) missing.push("Approximate budget");
   return missing;

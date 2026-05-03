@@ -57,6 +57,7 @@ export const updateCompany = asyncHandler(async (req: Request, res: Response) =>
 
   if (name) company.name = name;
   if (settings?.aiEnabled !== undefined) company.settings.aiEnabled = settings.aiEnabled;
+  if (settings?.ragEnabled !== undefined) company.settings.ragEnabled = settings.ragEnabled;
   if (settings?.language) company.settings.language = settings.language;
   if (Array.isArray(tags)) company.tags = tags;
 

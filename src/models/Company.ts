@@ -20,6 +20,7 @@ export interface ICompany extends Document {
   tags: string[];
   settings: {
     aiEnabled: boolean;
+    ragEnabled: boolean;
     language: string;
   };
   createdAt: Date;
@@ -47,6 +48,7 @@ const CompanySchema = new Schema<ICompany>(
     tags: { type: [String], default: [] },
     settings: {
       aiEnabled: { type: Boolean, default: true },
+      ragEnabled: { type: Boolean, default: true },
       language: { type: String, default: "en" },
     },
   },

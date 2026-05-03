@@ -220,7 +220,7 @@ const handleIncomingMessages = async (body: any) => {
 
           // 7. Run the counselor agent
           const { agentMessage, extractedData, conversationComplete, leadQualityScore, leadQualityScoreReason } =
-            await runCounselorAgent(recentMessages, leadContext);
+            await runCounselorAgent(recentMessages, leadContext, undefined, String(companyId), company.settings.ragEnabled !== false);
 
           console.log(`[${leadPhoneNumber}] Agent reply: ${agentMessage}`);
           console.log(`[${leadPhoneNumber}] Quality score: ${leadQualityScore} — ${leadQualityScoreReason}`);

@@ -117,7 +117,9 @@ export const defineFollowUpJob = () => {
       const { agentMessage } = await runCounselorAgent(
         recentMessages,
         leadContext,
-        { isFollowUp: true, followUpStep: step }
+        { isFollowUp: true, followUpStep: step },
+        company?._id?.toString(),
+        company?.settings.ragEnabled !== false
       );
 
       // Send via WhatsApp

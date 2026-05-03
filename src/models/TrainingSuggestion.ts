@@ -17,6 +17,18 @@ export interface ITrainingSuggestion extends Document {
   suggestedReply: string;
   isEmbedded: boolean;
   pineconeId?: string;
+  // RAG training fields — each maps to one line/section in the embed text
+  situation: string;          // "Situation: ..."
+  stage: string;              // "Mid-stage: NEET score and city known, no country selected."
+  userIntent: string;             // "Intent: ..."
+  constraints: string;        // "Constraints: ..."
+  signals: string;            // "Signals: ..."
+  preferredCountries: string[]; // Countries explicitly mentioned in conversation
+  strategy: string[];           // Metadata only — injected at agent match time
+  antiPatterns: string[];     // Metadata only — injected at agent match time
+  embeddingStatus: "pending_review" | "embedded";
+  confirmedBy?: string;
+  confirmedAt?: Date;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -42,6 +54,22 @@ const TrainingSuggestionSchema = new Schema<ITrainingSuggestion>(
     suggestedReply: { type: String, required: true },
     isEmbedded: { type: Boolean, default: false },
     pineconeId: { type: String },
+    // RAG training fields
+    situation: { type: String, default: "" },
+    stage: { type: String, default: "" },
+    userIntent: { type: String, default: "" },
+    constraints: { type: String, default: "" },
+    signals: { type: String, default: "" },
+    preferredCountries: { type: [String], default: [] },
+    strategy: { type: [String], default: [] },
+    antiPatterns: { type: [String], default: [] },
+    embeddingStatus: {
+      type: String,
+      enum: ["pending_review", "embedded"],
+      default: "pending_review",
+    },
+    confirmedBy: { type: String },
+    confirmedAt: { type: Date },
   },
   { timestamps: true }
 );

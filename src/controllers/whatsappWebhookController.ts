@@ -5,7 +5,6 @@ import Company from "../models/Company";
 import ChatHistory from "../models/ChatHistory";
 import { runCounselorAgent, LeadContext } from "../utils/openai";
 import { scheduleFollowUp, cancelFollowUp } from "../jobs/followUpJob";
-import { evaluateLeadStage } from "../utils/aiStageEvaluator";
 import axios from "axios";
 
 // ─── WhatsApp API helpers ─────────────────────────────────────────────────────
@@ -246,16 +245,10 @@ const handleIncomingMessages = async (body: any) => {
           };
           await pushToChatHistory(lead._id, lead.leadPhoneNumber, lead.businessPhoneNumber!, companyId, agentMsg);
 
-          // 10. Schedule or cancel follow-up + set initial stage via AI when conversation ends
+          // 10. Schedule or cancel follow-up when conversation ends
+          // Stage is only updated when a counselor manually adds a remark — never auto-set here.
           if (conversationComplete) {
             await cancelFollowUp((lead._id as any).toString());
-            // Trigger AI stage eval if the lead has no stage yet
-            const freshLead = await Lead.findById(lead._id);
-            if (freshLead && !(freshLead as any).stage) {
-              evaluateLeadStage((lead._id as any).toString()).catch((err) =>
-                console.error("[StageEval] Post-conversation eval error:", err)
-              );
-            }
           } else {
             await scheduleFollowUp((lead._id as any).toString(), 1);
           }

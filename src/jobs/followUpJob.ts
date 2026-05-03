@@ -168,31 +168,7 @@ export const defineFollowUpJob = () => {
         await scheduleFollowUp(leadId, nextStep, false); // false = don't reset startedAt
       } else {
         console.log(`[FollowUp] Sequence complete for ${leadId}`);
-        // Lead never replied after all follow-up steps — mark as not_responding
-        const finalLead = await Lead.findById(leadId);
-        if (finalLead && !(finalLead as any).stage) {
-          const now = new Date();
-          const QUALITY_TAG_NAMES = new Set(["Most Interested", "Interested", "Least Interested", "Not Interested", "Not Responding"]);
-          const otherTags = ((finalLead as any).tags ?? []).filter((t: string) => !QUALITY_TAG_NAMES.has(t));
-          await Lead.findByIdAndUpdate(leadId, {
-            $set: {
-              stage: "not_responding",
-              stageUpdatedAt: now,
-              stageUpdatedBy: "ai",
-              tags: [...otherTags, "Not Responding"],
-            },
-            $push: {
-              activityLog: {
-                action: 'Stage set to "Not Responding" — follow-up sequence ended with no reply',
-                field: "stage",
-                newValue: "not_responding",
-                author: { id: "ai", name: "AI Assistant" },
-                createdAt: now,
-              },
-            },
-          });
-          console.log(`[FollowUp] Lead ${leadId} marked as not_responding`);
-        }
+        // Stage is only updated when a counselor manually adds a remark — not auto-set here.
         await clearFollowUp(leadId);
       }
     } catch (err) {

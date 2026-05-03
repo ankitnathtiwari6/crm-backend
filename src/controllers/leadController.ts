@@ -156,6 +156,7 @@ export const getLeads = asyncHandler(async (req: Request, res: Response) => {
       city: lead.city || null,
       state: lead.state || null,
       neetScore: lead.neetScore,
+      budget: (lead as any).budget || null,
       assignedTo: lead.assignedTo || null,
       numberOfEnquiry: lead.numberOfEnquiry,
       numberOfChatsMessages: lead.numberOfChatsMessages,

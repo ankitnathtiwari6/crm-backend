@@ -3,6 +3,7 @@ import Lead from "../models/Lead";
 import ChatHistory from "../models/ChatHistory";
 import asyncHandler from "../utils/asyncHandler";
 import User from "../models/User";
+import Company from "../models/Company";
 import { cancelFollowUp } from "../jobs/followUpJob";
 import { scheduleStageEval } from "../jobs/stageEvalJob";
 import { evaluateLeadStage } from "../utils/aiStageEvaluator";
@@ -635,6 +636,65 @@ export const getDashboardStats = asyncHandler(async (req: Request, res: Response
   } catch (error) {
     console.error("Error fetching dashboard stats:", error);
     res.status(500).json({ success: false, message: "Error fetching dashboard stats" });
+  }
+});
+
+/**
+ * Remark stats — day-wise counts (total + per person) and all-time per-person totals
+ * @route GET /api/leads/remark-stats
+ * @access Private
+ */
+export const getRemarkStats = asyncHandler(async (req: Request, res: Response) => {
+  try {
+    const days = Math.min(parseInt(req.query.days as string) || 30, 90);
+    const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+
+    // Exclude AI-authored remarks (sentinel id = "ai")
+    const humanFilter = { "remarks.author.id": { $not: { $regex: /^ai$/i } } };
+
+    // Day-wise counts per person within the window
+    const daywisePersonRaw = await Lead.aggregate([
+      { $match: { "remarks.0": { $exists: true } } },
+      { $unwind: "$remarks" },
+      { $match: { "remarks.createdAt": { $gte: since }, ...humanFilter } },
+      {
+        $group: {
+          _id: {
+            date: { $dateToString: { format: "%Y-%m-%d", date: "$remarks.createdAt" } },
+            name: "$remarks.author.name",
+          },
+          count: { $sum: 1 },
+        },
+      },
+      { $sort: { "_id.date": 1 } },
+    ]);
+
+    // All-time per-person totals
+    const byPersonRaw = await Lead.aggregate([
+      { $unwind: "$remarks" },
+      { $match: humanFilter },
+      {
+        $group: {
+          _id: { authorId: "$remarks.author.id", name: "$remarks.author.name" },
+          count: { $sum: 1 },
+        },
+      },
+      { $sort: { count: -1 } },
+    ]);
+
+    const total = byPersonRaw.reduce((sum: number, p: any) => sum + p.count, 0);
+
+    res.status(200).json({
+      success: true,
+      stats: {
+        daywisePerson: daywisePersonRaw.map((d: any) => ({ date: d._id.date, name: d._id.name || "Unknown", count: d.count })),
+        byPerson: byPersonRaw.map((p: any) => ({ name: p._id.name || "Unknown", count: p.count })),
+        total,
+      },
+    });
+  } catch (error) {
+    console.error("Error fetching remark stats:", error);
+    res.status(500).json({ success: false, message: "Error fetching remark stats" });
   }
 });
 

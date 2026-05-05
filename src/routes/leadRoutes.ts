@@ -9,6 +9,7 @@ import {
   addRemark,
   getFunnelStats,
   getDashboardStats,
+  getRemarkStats,
 } from "../controllers/leadController";
 import { protect } from "../middleware/authMiddleware";
 
@@ -19,6 +20,7 @@ router.get("/", protect, getLeads);
 // Must be before /:id to avoid string routes being matched as an id
 router.get("/funnel-stats", protect, getFunnelStats);
 router.get("/dashboard-stats", protect, getDashboardStats);
+router.get("/remark-stats", protect, getRemarkStats);
 
 router.get("/:id", protect, getLeadById);
 

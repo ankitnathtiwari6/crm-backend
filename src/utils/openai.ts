@@ -78,12 +78,12 @@ export const runCounselorAgent = async (
     }));
 
     const response = await getClient().chat.completions.create({
-      model: "gpt-5.4-mini-2026-03-17",
+      model: "gpt-4.1-mini",
       messages: [
         { role: "system", content: systemPrompt + contextNote },
         ...messages,
       ],
-      max_completion_tokens: 2000,
+      max_completion_tokens: 800,
       temperature: followUp?.isFollowUp ? 0.9 : 0.7,
       response_format: { type: "json_object" },
     });

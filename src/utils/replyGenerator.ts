@@ -98,7 +98,7 @@ export async function generateReply(params: {
   const response = await getOpenAI().chat.completions.create({
     model: "gpt-5.4-mini-2026-03-17",
     messages: [{ role: "user", content: prompt }],
-    max_completion_tokens: 500,
+    max_completion_tokens: 800,
     temperature: 0.7,
   });
 

@@ -60,7 +60,7 @@ Generate the retrieval document in EXACTLY the format above. Every section is re
 Output only the formatted text — no explanation, no extra lines.`;
 
   const response = await getOpenAI().chat.completions.create({
-    model: "gpt-5.4-mini-2026-03-17",
+    model: "gpt-4.1-mini",
     messages: [{ role: "user", content: prompt }],
     max_completion_tokens: 300,
     temperature: 0.2,

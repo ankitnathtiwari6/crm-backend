@@ -112,6 +112,19 @@ const getQualityTag = (score: number): string => {
   return "Not Responding";
 };
 
+// ─── Junk lead detection ──────────────────────────────────────────────────────
+
+const isMissingMostKeyFields = (lead: any, extracted: any): boolean => {
+  const name = lead.name || extracted.name;
+  const location = lead.city || lead.state || extracted.city || extracted.state;
+  const neet = lead.neetScore != null ? lead.neetScore : extracted.neetScore;
+  const qualification = lead.qualification || extracted.qualification;
+  const country = lead.preferredCountry || extracted.preferredCountry;
+  const budget = lead.budget || extracted.budget;
+  const present = [name, location, neet, qualification, country, budget].filter(Boolean).length;
+  return present <= 2;
+};
+
 // ─── Core message handler ─────────────────────────────────────────────────────
 
 const handleIncomingMessages = async (body: any) => {
@@ -182,23 +195,36 @@ const handleIncomingMessages = async (body: any) => {
             companyId
           );
 
-          // 3. Resolve active session (creates new one if needed)
+          // 3. Skip AI for AI-blocked leads — just record the message and stop
+          if (lead.aiBlocked) {
+            console.log(`[${leadPhoneNumber}] Lead is AI-blocked (${lead.aiBlockReason ?? "no reason"}), skipping response`);
+            await pushToChatHistory(lead._id, lead.leadPhoneNumber, lead.businessPhoneNumber!, companyId, {
+              messageId, content: messageBody, role: "lead" as const, timestamp, sessionId: undefined,
+            });
+            await Lead.findByIdAndUpdate(lead._id, {
+              $inc: { messageCount: 1, numberOfChatsMessages: 1 },
+              $set: { lastInteraction: new Date() },
+            });
+            continue;
+          }
+
+          // 4. Resolve active session (creates new one if needed)
           const sessionId = await resolveSession((lead._id as any).toString(), lead.sessions ?? []);
 
-          // 4. Save incoming message tagged with sessionId
+          // 5. Save incoming message tagged with sessionId
           const incomingMsg = { messageId, content: messageBody, role: "lead" as const, timestamp, sessionId };
           await pushToChatHistory(lead._id, lead.leadPhoneNumber, lead.businessPhoneNumber!, companyId, incomingMsg);
 
           // Cancel any pending follow-up — user has replied
           await cancelFollowUp((lead._id as any).toString());
 
-          // 5. Fetch last 20 messages across ALL sessions for agent context
+          // 6. Fetch last 20 messages across ALL sessions for agent context
           const chatDoc = await ChatHistory.findOne({ leadId: lead._id });
           const recentMessages = (chatDoc?.messages ?? [])
             .slice(-20)
             .map((m) => ({ role: m.role, content: m.content }));
 
-          // 6. Build lead context
+          // 7. Build lead context
           const leadContext: LeadContext = {
             contactType: lead.contactType,
             name: lead.name,
@@ -217,7 +243,7 @@ const handleIncomingMessages = async (body: any) => {
             sessionCount: lead.sessions?.length,
           };
 
-          // 7. Run the counselor agent
+          // 8. Run the counselor agent
           const { agentMessage, extractedData, conversationComplete, leadQualityScore, leadQualityScoreReason } =
             await runCounselorAgent(recentMessages, leadContext, undefined, String(companyId), company.settings.ragEnabled !== false);
 
@@ -225,19 +251,38 @@ const handleIncomingMessages = async (body: any) => {
           console.log(`[${leadPhoneNumber}] Quality score: ${leadQualityScore} — ${leadQualityScoreReason}`);
           if (conversationComplete) console.log(`[${leadPhoneNumber}] Conversation complete`);
 
-          // 8. Send agent reply via WhatsApp
+          // 9. Auto-block junk leads after too many messages with no meaningful data
+          const newMessageCount = lead.messageCount + 2;
+          const shouldAutoBlock =
+            (leadQualityScore !== undefined && leadQualityScore < 20 && newMessageCount >= 14) ||
+            (leadQualityScore !== undefined && leadQualityScore < 35 && newMessageCount >= 22 && isMissingMostKeyFields(lead, extractedData));
+
+          let finalAgentMessage = agentMessage;
+          let finalConversationComplete = conversationComplete;
+
+          if (shouldAutoBlock) {
+            finalConversationComplete = true;
+            if (!conversationComplete) {
+              finalAgentMessage = lead.name
+                ? `Thank you for your time, ${lead.name}! If you ever need guidance for MBBS abroad, feel free to reach out. 😊`
+                : "Thank you for your time! If you ever need guidance for MBBS abroad, feel free to reach out. 😊";
+            }
+            console.log(`[${leadPhoneNumber}] Auto-blocking lead (score: ${leadQualityScore}, messages: ${newMessageCount})`);
+          }
+
+          // 10. Send agent reply via WhatsApp
           let sentMsgId = `agent_${Date.now()}`;
           try {
-            const sent = await sendWhatsappMessage(leadPhoneNumber, agentMessage, businessPhoneId, accessToken);
+            const sent = await sendWhatsappMessage(leadPhoneNumber, finalAgentMessage, businessPhoneId, accessToken);
             sentMsgId = sent.messages?.[0]?.id ?? sentMsgId;
           } catch (sendErr: any) {
             console.error(`[${leadPhoneNumber}] Failed to send WhatsApp message:`, sendErr?.response?.data ?? sendErr.message);
           }
 
-          // 9. Save agent reply tagged with sessionId
+          // 11. Save agent reply tagged with sessionId
           const agentMsg = {
             messageId: sentMsgId,
-            content: agentMessage,
+            content: finalAgentMessage,
             role: "assistant" as const,
             timestamp: new Date(),
             status: "sent" as const,
@@ -245,15 +290,15 @@ const handleIncomingMessages = async (body: any) => {
           };
           await pushToChatHistory(lead._id, lead.leadPhoneNumber, lead.businessPhoneNumber!, companyId, agentMsg);
 
-          // 10. Schedule or cancel follow-up when conversation ends
+          // 12. Schedule or cancel follow-up when conversation ends
           // Stage is only updated when a counselor manually adds a remark — never auto-set here.
-          if (conversationComplete) {
+          if (finalConversationComplete) {
             await cancelFollowUp((lead._id as any).toString());
           } else {
             await scheduleFollowUp((lead._id as any).toString(), 1);
           }
 
-          // 11. Update lead: counters + extracted fields + quality score + session messageCount
+          // 13. Update lead: counters + extracted fields + quality score + session messageCount + block flag
           const updateFields: any = {};
           for (const [key, val] of Object.entries(extractedData)) {
             const existing = (lead as any)[key];
@@ -269,12 +314,17 @@ const handleIncomingMessages = async (body: any) => {
             // Sync the AI quality tag into aiTags only — never touch manual tags
             updateFields.aiTags = [getQualityTag(leadQualityScore)];
           }
+          if (shouldAutoBlock) {
+            updateFields.aiBlocked = true;
+            updateFields.aiBlockedAt = new Date();
+            updateFields.aiBlockReason = `Auto-blocked: score ${leadQualityScore ?? "?"} after ${newMessageCount} messages with insufficient MBBS data`;
+          }
 
           const sessionUpdate: any = {
             $inc: { messageCount: 2, numberOfChatsMessages: 2, "sessions.$[s].messageCount": 2 },
             $set: { lastInteraction: new Date(), ...updateFields },
           };
-          if (conversationComplete) {
+          if (finalConversationComplete) {
             sessionUpdate.$set["sessions.$[s].status"] = "complete";
           }
 

@@ -118,6 +118,9 @@ export interface ILead extends Document {
   leadQualityScore?: number;
   leadQualityScoreReason?: string;
   leadQualityScoreUpdatedAt?: Date;
+  aiBlocked?: boolean;
+  aiBlockedAt?: Date;
+  aiBlockReason?: string;
   remarks: IRemark[];
   activityLog: IActivityLog[];
   createdAt: Date;
@@ -182,6 +185,9 @@ const LeadSchema: Schema = new Schema(
     leadQualityScore: { type: Number, min: 0, max: 100 },
     leadQualityScoreReason: { type: String },
     leadQualityScoreUpdatedAt: { type: Date },
+    aiBlocked: { type: Boolean, default: false },
+    aiBlockedAt: { type: Date },
+    aiBlockReason: { type: String },
     remarks: { type: [RemarkSchema], default: [] },
     activityLog: { type: [ActivityLogSchema], default: [] },
   },

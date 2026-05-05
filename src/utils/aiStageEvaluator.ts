@@ -41,7 +41,7 @@ const getClient = (): OpenAI => {
 
 export const evaluateLeadStage = async (
   leadId: string,
-  newRemark?: string
+  newRemark?: string,
 ): Promise<void> => {
   const lead = await Lead.findById(leadId);
   if (!lead) return;
@@ -59,7 +59,7 @@ export const evaluateLeadStage = async (
     contextParts.push(
       `Recent remarks:\n${recentRemarks
         .map((r) => `- "${r.text}" (by ${r.author.name})`)
-        .join("\n")}`
+        .join("\n")}`,
     );
   }
 
@@ -75,7 +75,7 @@ export const evaluateLeadStage = async (
         { role: "system", content: STAGE_EVAL_PROMPT },
         { role: "user", content: contextParts.join("\n") },
       ],
-      max_completion_tokens: 150,
+      max_completion_tokens: 300,
       temperature: 0.2,
       response_format: { type: "json_object" },
     });
@@ -113,6 +113,6 @@ export const evaluateLeadStage = async (
 
   await lead.save();
   console.log(
-    `[StageEval] Lead ${leadId}: "${previousStage || "None"}" → "${newStage}" — ${result.reason}`
+    `[StageEval] Lead ${leadId}: "${previousStage || "None"}" → "${newStage}" — ${result.reason}`,
   );
 };

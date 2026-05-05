@@ -692,7 +692,7 @@ export const getFunnelStats = asyncHandler(async (req: Request, res: Response) =
           total:            [{ $count: "count" }],
           aiEngaged:        [{ $match: { messageCount: { $gt: 0 } } }, { $count: "count" }],
           hot:              [{ $match: { leadQualityScore: { $gte: 70 } } }, { $count: "count" }],
-          warm:             [{ $match: { leadQualityScore: { $gte: 40, $lt: 70 } } }, { $count: "count" }],
+          warm:             [{ $match: { leadQualityScore: { $gte: 40 } } }, { $count: "count" }],
           cold:             [{ $match: { leadQualityScore: { $lt: 40, $ne: null } } }, { $count: "count" }],
           notResponding:    [{ $match: { stage: "not_responding" } }, { $count: "count" }],
           callStarted:      [{ $match: { stage: "call_started" } }, { $count: "count" }],
@@ -742,36 +742,34 @@ export const createLead = asyncHandler(async (req: Request, res: Response) => {
     const {
       name,
       city,
+      state,
       phoneNumber,
-      neetStatus,
-      source = "website",
+      neetScore,
+      preferredCountry,
+      source = "Manual",
+      assignedTo,
     } = req.body;
 
-    // Validate required fields
     if (!phoneNumber) {
-      return res.status(400).json({
-        success: false,
-        message: "Phone number is required",
-      });
+      return res.status(400).json({ success: false, message: "Phone number is required" });
     }
 
-    // Check if lead already exists with this phone number
     const existingLead = await Lead.findOne({ leadPhoneNumber: phoneNumber });
     if (existingLead) {
-      return res.status(400).json({
-        success: false,
-        message: "Lead with this phone number already exists",
-      });
+      return res.status(400).json({ success: false, message: "Lead with this phone number already exists" });
     }
 
-    // Create new lead
     const newLead = new Lead({
       leadPhoneNumber: phoneNumber,
-      businessPhoneNumber: process.env.DEFAULT_BUSINESS_PHONE || "", // Set a default or get from env
-      businessPhoneId: process.env.DEFAULT_BUSINESS_PHONE_ID || "", // Set a default or get from env
-      name: name || "Unknown",
-      city: city || null,
-      source: source,
+      businessPhoneNumber: process.env.DEFAULT_BUSINESS_PHONE || "",
+      businessPhoneId: process.env.DEFAULT_BUSINESS_PHONE_ID || "",
+      name: name?.trim() || "Unknown",
+      city: city?.trim() || null,
+      state: state?.trim() || null,
+      neetScore: neetScore != null ? parseInt(String(neetScore)) : null,
+      preferredCountry: preferredCountry || null,
+      source,
+      assignedTo: assignedTo || null,
       numberOfEnquiry: 1,
       firstInteraction: new Date(),
       lastInteraction: new Date(),
@@ -781,7 +779,38 @@ export const createLead = asyncHandler(async (req: Request, res: Response) => {
 
     res.status(201).json({
       success: true,
-      lead: savedLead,
+      lead: {
+        id: savedLead._id,
+        leadPhoneNumber: savedLead.leadPhoneNumber,
+        businessPhoneNumber: savedLead.businessPhoneNumber,
+        businessPhoneId: savedLead.businessPhoneId,
+        name: savedLead.name || "Unknown",
+        email: null,
+        preferredCountry: savedLead.preferredCountry || null,
+        city: savedLead.city || null,
+        state: savedLead.state || null,
+        neetScore: savedLead.neetScore ?? null,
+        budget: null,
+        assignedTo: savedLead.assignedTo || null,
+        numberOfEnquiry: savedLead.numberOfEnquiry,
+        numberOfChatsMessages: 0,
+        firstInteraction: savedLead.firstInteraction,
+        lastInteraction: savedLead.lastInteraction,
+        messageCount: 0,
+        status: savedLead.status,
+        stage: null,
+        stageUpdatedBy: null,
+        tags: [],
+        aiTags: [],
+        source: savedLead.source || "Manual",
+        notes: null,
+        sessions: [],
+        leadQualityScore: null,
+        leadQualityScoreReason: null,
+        leadQualityScoreUpdatedAt: null,
+        createdAt: savedLead.createdAt,
+        updatedAt: savedLead.updatedAt,
+      },
     });
   } catch (error) {
     console.error("Error creating lead:", error);

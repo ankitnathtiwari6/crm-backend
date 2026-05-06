@@ -93,7 +93,7 @@ export interface ILead extends Document {
   state?: string;
   neetScore?: number | null;
   neetYear?: number;
-  qualification?: "12th_appearing" | "12th_passed" | "dropper" | "other";
+  qualification?: string;
   targetYear?: number;
   budget?: string;
   stage?: string;
@@ -147,10 +147,7 @@ const LeadSchema: Schema = new Schema(
     state: { type: String },
     neetScore: { type: Number, default: null },
     neetYear: { type: Number },
-    qualification: {
-      type: String,
-      enum: ["12th_appearing", "12th_passed", "dropper", "other"],
-    },
+    qualification: { type: String },
     targetYear: { type: Number },
     budget: { type: String },
     stage: {

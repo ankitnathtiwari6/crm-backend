@@ -62,7 +62,7 @@ export const getLeads = asyncHandler(async (req: Request, res: Response) => {
       if (tags) {
         const tagArray = Array.isArray(tags) ? tags : [tags];
         if (tagArray.length > 0) {
-          filter.tags = { $all: tagArray };
+          filter.tags = { $in: tagArray };
         }
       }
 
@@ -733,7 +733,7 @@ export const getFunnelStats = asyncHandler(async (req: Request, res: Response) =
     const tags = req.query.tags;
     if (tags) {
       const tagArray = Array.isArray(tags) ? tags : [tags];
-      if (tagArray.length > 0) match.tags = { $all: tagArray };
+      if (tagArray.length > 0) match.tags = { $in: tagArray };
     }
 
     if (req.query.country) match.preferredCountry = new RegExp(req.query.country as string, "i");

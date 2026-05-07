@@ -10,6 +10,7 @@ import {
   getFunnelStats,
   getDashboardStats,
   getRemarkStats,
+  getRemarkAnalytics,
 } from "../controllers/leadController";
 import { protect } from "../middleware/authMiddleware";
 
@@ -21,6 +22,7 @@ router.get("/", protect, getLeads);
 router.get("/funnel-stats", protect, getFunnelStats);
 router.get("/dashboard-stats", protect, getDashboardStats);
 router.get("/remark-stats", protect, getRemarkStats);
+router.get("/remark-analytics", protect, getRemarkAnalytics);
 
 router.get("/:id", protect, getLeadById);
 

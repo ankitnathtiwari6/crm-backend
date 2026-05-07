@@ -699,6 +699,147 @@ export const getRemarkStats = asyncHandler(async (req: Request, res: Response) =
 });
 
 /**
+ * Remark analytics — 4 datasets for the remark-focused dashboard
+ * @route GET /api/leads/remark-analytics
+ * @access Private
+ */
+export const getRemarkAnalytics = asyncHandler(async (req: Request, res: Response) => {
+  try {
+    const days = Math.min(parseInt(req.query.days as string) || 7, 90);
+    const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+    const yearStart = new Date(new Date().getFullYear(), 0, 1);
+
+    // Aggregation expression: true when remark is human-authored (author.id != "ai")
+    const isHumanCond = { $ne: [{ $toLower: { $ifNull: ["$$r.author.id", ""] } }, "ai"] };
+
+    // 1. Day-wise remarks per person (Graph 1)
+    const daywisePersonRaw = await Lead.aggregate([
+      { $match: { "remarks.0": { $exists: true } } },
+      { $unwind: "$remarks" },
+      { $match: { "remarks.createdAt": { $gte: since }, "remarks.author.id": { $not: { $regex: /^ai$/i } } } },
+      {
+        $group: {
+          _id: {
+            date: { $dateToString: { format: "%Y-%m-%d", date: "$remarks.createdAt" } },
+            name: "$remarks.author.name",
+          },
+          count: { $sum: 1 },
+        },
+      },
+      { $sort: { "_id.date": 1 } },
+    ]);
+
+    // 2. Leads created per day + first-remarker attribution (Graph 2)
+    const leadsCreatedRaw = await Lead.aggregate([
+      { $match: { createdAt: { $gte: since } } },
+      {
+        $addFields: {
+          createdDay: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
+          firstHumanRemark: {
+            $arrayElemAt: [
+              { $filter: { input: { $ifNull: ["$remarks", []] }, as: "r", cond: isHumanCond } },
+              0,
+            ],
+          },
+        },
+      },
+      {
+        $group: {
+          _id: {
+            date: "$createdDay",
+            person: { $ifNull: ["$firstHumanRemark.author.name", "No Remark"] },
+          },
+          count: { $sum: 1 },
+        },
+      },
+      { $sort: { "_id.date": 1 } },
+    ]);
+
+    // 3. Per-user, per-day: fresh (first-ever remark on lead) vs re-remark (Graph 3)
+    const userFreshnessRaw = await Lead.aggregate([
+      { $match: { "remarks.0": { $exists: true } } },
+      {
+        $addFields: {
+          humanRemarks: { $filter: { input: "$remarks", as: "r", cond: isHumanCond } },
+        },
+      },
+      { $match: { "humanRemarks.0": { $exists: true } } },
+      {
+        $addFields: {
+          firstHumanRemarkDate: { $min: { $map: { input: "$humanRemarks", as: "r", in: "$$r.createdAt" } } },
+        },
+      },
+      { $unwind: "$humanRemarks" },
+      { $match: { "humanRemarks.createdAt": { $gte: since } } },
+      {
+        $addFields: {
+          isFresh: { $eq: ["$humanRemarks.createdAt", "$firstHumanRemarkDate"] },
+        },
+      },
+      {
+        $group: {
+          _id: {
+            date: { $dateToString: { format: "%Y-%m-%d", date: "$humanRemarks.createdAt" } },
+            person: "$humanRemarks.author.name",
+            isFresh: "$isFresh",
+          },
+          count: { $sum: 1 },
+        },
+      },
+      { $sort: { "_id.date": 1 } },
+    ]);
+
+    // 4. This-year summary: total leads + pending manual remark
+    const [yearStats] = await Lead.aggregate([
+      { $match: { createdAt: { $gte: yearStart } } },
+      {
+        $addFields: {
+          humanRemarksCount: {
+            $size: { $filter: { input: { $ifNull: ["$remarks", []] }, as: "r", cond: isHumanCond } },
+          },
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          total: { $sum: 1 },
+          pending: { $sum: { $cond: [{ $eq: ["$humanRemarksCount", 0] }, 1, 0] } },
+        },
+      },
+    ]);
+
+    res.status(200).json({
+      success: true,
+      data: {
+        daywisePerson: daywisePersonRaw.map((d: any) => ({
+          date: d._id.date,
+          name: d._id.name || "Unknown",
+          count: d.count,
+        })),
+        leadsCreatedWithRemark: leadsCreatedRaw.map((d: any) => ({
+          date: d._id.date,
+          person: d._id.person || "No Remark",
+          count: d.count,
+        })),
+        userRemarkFreshness: userFreshnessRaw.map((d: any) => ({
+          date: d._id.date,
+          person: d._id.person || "Unknown",
+          isFresh: d._id.isFresh,
+          count: d.count,
+        })),
+        yearSummary: {
+          total: yearStats?.total ?? 0,
+          pending: yearStats?.pending ?? 0,
+        },
+      },
+    });
+  } catch (error) {
+    console.error("Error fetching remark analytics:", error);
+    res.status(500).json({ success: false, message: "Error fetching remark analytics" });
+  }
+});
+
+/**
  * Funnel stats — counts per stage + AI engagement metrics
  * @route GET /api/leads/funnel-stats
  * @access Private

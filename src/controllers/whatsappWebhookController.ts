@@ -218,10 +218,9 @@ const handleIncomingMessages = async (body: any) => {
           // Cancel any pending follow-up — user has replied
           await cancelFollowUp((lead._id as any).toString());
 
-          // 6. Fetch last 20 messages across ALL sessions for agent context
+          // 6. Fetch full chat history across ALL sessions for agent context
           const chatDoc = await ChatHistory.findOne({ leadId: lead._id });
           const recentMessages = (chatDoc?.messages ?? [])
-            .slice(-20)
             .map((m) => ({ role: m.role, content: m.content }));
 
           // 7. Build lead context

@@ -21,21 +21,19 @@ function buildLanguageRule(
   conversationContext: Array<{ role: string; content: string }>,
 ): string {
   const userMessages = conversationContext
-    .filter((m) => m.role === "lead" || m.role === "user")
-    .slice(-4);
+    .filter((m) => m.role === "lead" || m.role === "user");
 
   if (!userMessages.length) return "";
 
   return [
     "FINAL LANGUAGE INSTRUCTION — override everything else:",
-    "Determine the reply language from the customer's messages ONLY. Ignore the agent's language entirely.",
+    "Determine the reply language from the customer's full message history. Language is sticky — once Hindi/Hinglish is established, stay in it.",
     `Customer messages:\n${userMessages.map((m) => `"${m.content}"`).join("\n")}`,
     "Rules:",
-    "- If the customer uses Hindi words (kitna, lagega, sir, kya, hai, bhai, etc.) in Roman script → reply in Hinglish (Roman-script Hindi, same as the customer)",
-    "- If the customer writes in Devanagari script → reply in Hindi (Devanagari)",
-    "- If the customer writes in clear English sentences → reply in English",
-    '- Short neutral words ("Hi", "ok", place names, "12th pass") are not enough to determine — look at the dominant pattern across all messages above',
-    "The agent's past language does NOT matter.",
+    "- If the customer has used Hindi words (kitna, lagega, sir, kya, hai, bhai, etc.) in Roman script at ANY point → reply in Hinglish for this and all future replies",
+    "- If the customer has used Devanagari script at ANY point → reply in Hindi (Devanagari)",
+    "- Short neutral messages (\"ok\", \"yes\", a number, a place name) do NOT reset the language — stick with the language last clearly established",
+    "- Only reply in English if the customer has NEVER used any Hindi or Hinglish across all messages above",
   ].join("\n");
 }
 

@@ -11,14 +11,16 @@ export const buildFollowUpContext = (leadData: LeadContext, step: number): strin
 
 ${alreadyCollected}
 
-CONTEXT: The person has not replied yet. This is follow-up message ${step} of 3.
+CONTEXT: The person has not replied to your last message. This is follow-up message ${step} of 3.
 
-Look at the conversation above and send a casual, natural continuation of it — like a friend picking up a thread they left off. Reference something specific from the last exchange if possible. Do not introduce new topics, facts, or advice.
+Look at your LAST message in the conversation above. Your follow-up should gently nudge the person to reply to exactly what you asked in that last message — do not introduce anything new.
 
 Rules:
 - 1 to 2 lines only.
-- No questions, no data collection, no asking for name/score/city/anything.
-- Do NOT repeat or paraphrase anything from your previous messages in this chat.
+- Reference what you last asked or said — make it feel like a natural nudge, not a generic check-in.
+- You MAY ask one simple question if it directly picks up from the last message (e.g. if you asked for their budget last, you can ask again softly).
+- Do NOT ask for new information beyond what was already asked in the last message.
+- Do NOT repeat or paraphrase anything word-for-word from your previous messages.
 - Do NOT start with "Hi", "Hello", "Hey", "Hope", "Just", "Wanted", "Following", "Checking".
 - No bullet points, no lists, plain text only.
 - Warm and zero pressure. If they don't reply, that is fine.`;
